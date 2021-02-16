@@ -103,8 +103,9 @@ declare function BuildOrbit {
 }
 
 declare function UpdateOrbitParams {
-	declare parameter orb.
 	declare parameter _orb to ship:ORBIT.
+
+	local orb to OrbitClass:COPY.
 
 	set orb["Ap"] to _orb:APOAPSIS + Globals["R"].
 	set orb["Pe"] to _orb:PERIAPSIS + Globals["R"].
@@ -128,11 +129,11 @@ declare function RatAngle {
 
 	local axis to ANNorm(orb["LAN"], orb["Inc"]):upvector.	//Orbit normal vector
 
-	set vec to Vrot(vec, axis, -1*(orb["AoP"] + angle)).	//Rotating vector to desired true anomaly
+	local r to Vrot(vec, axis, -1*(orb["AoP"] + angle)).	//Rotating vector to desired true anomaly
 
-	set vec:mag to (orb["p"]/(1 + orb["e"] * cos(angle))).	//Orbit altitude at given true anomaly
+	set r:mag to (orb["p"]/(1 + orb["e"] * cos(angle))).	//Orbit altitude at given true anomaly
 
-	return vec.
+	return r.
 }
 
 declare function VatR {
@@ -450,114 +451,112 @@ declare function getLVLHfromR {
 	LOCAL plusX IS position:VEC.
 	SET plusX:MAG TO 1.
 
-	LOCAL plusY TO VCRS(ANNorm(orbit["LAN"], orbit["Inc"]):UPVECTOR:NORMALIZED, plusX).
+	LOCAL plusY TO -VCRS(ANNorm(orbit["LAN"], orbit["Inc"]):UPVECTOR:NORMALIZED, plusX).
 	SET plusY:MAG TO 1.
 
 	LOCAL plusZ IS VCRS(plusX, plusY).
 	SET plusZ:MAG TO 1.
-	RETURN LEXICON("x", plusX, "y", plusY, "z", plusZ).
+
+	RETURN getTransform(LEXICON("x", plusX, "y", plusY, "z", plusZ)).
 }
 
-declare function getECI {	//TODO: Convert all functions to return true ECI
-	return LEXICON("x", v(1,0,0), "y", v(0,1,0), "z", v(0,0,1)).
-}
-
-declare function convertToLVLH {
-	declare parameter LVLH.
-	declare parameter vec.
-
-	LOCAL plusX IS LVLH["x"]:VEC.
-	LOCAL plusY IS LVLH["y"]:VEC.
-	LOCAL plusZ IS LVLH["z"]:VEC.
-
-	LOCAL XYplane IS vec - (plusZ * (vec:mag*cos(vang(vec, plusZ)))).
-
-	LOCAL x TO XYplane:MAG * cos(vang(XYplane, plusX)).
-	LOCAL y TO XYplane:MAG * cos(vang(XYplane, plusY)).
-	LOCAL Zvec TO vec - XYplane.
-	LOCAL z TO Zvec:MAG * cos(vang(Zvec, plusZ)).
-
-
-
-	RETURN v(x, y, z).
+declare function getTransform {
+	DECLARE PARAMETER basis.
+	LOCAL transform TO BuildTransformMatrix(basis).
+	LOCAL transform_inv to MatrixFindInverse(transform).
+	return lexicon("Transform", BuildTransformMatrix(basis), "Inverse", transform_inv, "Basis", basis).
 }
 
 declare function CWequationFutureFromCurrent {
-	DECLARE PARAMETER chaserPosition.
-	DECLARE PARAMETER chaserVelocity.
-	DECLARE PARAMETER time.
-	DECLARE PARAMETER targetOrbit.
-	DECLARE PARAMETER targetPosition.
-	DECLARE PARAMETER targetVelocity.
+	DECLARE PARAMETER chaserShip.
+	DECLARE PARAMETER targetShip.
+	DECLARE PARAMETER initialTime.
+	DECLARE PARAMETER finalTime.
+
+	//Compute craft's positions and velocities
+	LOCAL chaserOrbit TO UpdateOrbitParams(chaserShip:ORBIT).
+	LOCAL targetOrbit TO UpdateOrbitParams(targetShip:ORBIT).
+
+	LOCAL chaserPosition TO RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL chaserVelocity TO VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+
+	LOCAL targetPosition TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL targetVelocity TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
 
 	LOCAL n IS SQRT((Globals["mu"]) / (TargetOrbit["a"] * TargetOrbit["a"] * TargetOrbit["a"])).
 
 	//Convert ECI to LVLH
 	//Create target LVLH basis
 	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
-	LOCAL ECI IS getECI().
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.
-	LOCAL LVLHrelativePosition IS convertToLVLH(LVLH, relativePosition).
-
-	LOCAL relativePositionMatrix TO GetMatrix().
-	SET relativePositionMatrix["MatrixSelf"] TO LIST(
-													LIST(LVLHrelativePosition:X),
-													LIST(LVLHrelativePosition:Y),
-													LIST(LVLHrelativePosition:Z)
-												).
+	LOCAL LVLHrelativePosition IS VCMT(LVLH:Transform, relativePosition).
 
 	//Compute relative velocity vectors
-	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*LVLH:z, relativePosition).
-	LOCAL LVLHrelativeVelocity IS convertToLVLH(LVLH, relativeVelocity).
+	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*LVLH:basis:z, relativePosition).
+	LOCAL LVLHrelativeVelocity IS VCMT(LVLH:Transform, relativeVelocity).
 
-	LOCAL relativeVelocityMatrix TO GetMatrix().
-	SET relativeVelocityMatrix["MatrixSelf"] TO LIST(
-													LIST(LVLHrelativeVelocity:X),
-													LIST(LVLHrelativeVelocity:Y),
-													LIST(LVLHrelativeVelocity:Z)
-												).
+	LOCAL LVLHrelativePositionFinal TO V(0,0,0).
 
-	//LOCAL LVLHrelativePositionFinal TO _CWfindRatT_(relativePositionMatrix, relativeVelocityMatrix, n, time).
-	LOCAL LVLHrelativePositionFinal is v(0, 0, 0).
+	IF (finalTime <> 0) {
+
+		LOCAL relativePositionMatrix TO GetMatrix().
+		SET relativePositionMatrix["MatrixSelf"] TO LIST(
+														LIST(LVLHrelativePosition:X),
+														LIST(LVLHrelativePosition:Y),
+														LIST(LVLHrelativePosition:Z)
+													).
+
+		LOCAL relativeVelocityMatrix TO GetMatrix().
+		SET relativeVelocityMatrix["MatrixSelf"] TO LIST(
+														LIST(LVLHrelativeVelocity:X),
+														LIST(LVLHrelativeVelocity:Y),
+														LIST(LVLHrelativeVelocity:Z)
+													).
+
+		SET LVLHrelativePositionFinal TO _CWfindRatT_(relativePositionMatrix, relativeVelocityMatrix, n, finalTime - initialTime).
+	}
 
 	RETURN LEXICON(
-		"LVLHcurrentR", LVLHrelativePosition,
-		"LVLHcurrentV", LVLHrelativeVelocity,
-		"LVLHfutureR", LVLHrelativePositionFinal
+		"LVLHrelativePosition", LVLHrelativePosition,
+		"LVLHrelativeVelocity", LVLHrelativeVelocity,
+		"LVLHrelativePositionFinal", LVLHrelativePositionFinal
 	).
 }
 
-declare function CWequationCurrentFromFuture {
-	DECLARE PARAMETER chaserPosition.
-	DECLARE PARAMETER chaserVelocity.
-	DECLARE PARAMETER chaserPositionFinal.
-	DECLARE PARAMETER time.
-	DECLARE PARAMETER targetOrbit.
-	DECLARE PARAMETER targetPosition.
-	DECLARE PARAMETER targetVelocity.
-	DECLARE PARAMETER targetPositionFinal.
+declare function CWequationCurrentVelFromFuturePos {
+	DECLARE PARAMETER chaserShip.
+	DECLARE PARAMETER targetShip.
+	DECLARE PARAMETER LVLHrelativePositionFinal.
+	DECLARE PARAMETER initialTime.
+	DECLARE PARAMETER finalTime.
+
+	//Compute craft's positions and velocities
+	LOCAL chaserOrbit TO UpdateOrbitParams(chaserShip:ORBIT).
+	LOCAL targetOrbit TO UpdateOrbitParams(targetShip:ORBIT).
+
+	LOCAL chaserPosition TO RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL chaserVelocity TO VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+
+	LOCAL targetPosition TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL targetVelocity TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
+
+	LOCAL targetPositionFinal TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, finalTime)).
+	LOCAL targetVelocityFinal TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, finalTime)).
 
 	LOCAL n IS SQRT(Globals["mu"] / (TargetOrbit["a"] * TargetOrbit["a"] * TargetOrbit["a"])).
 
 	//Convert ECI to LVLH
-
 	//Create target LVLH basis
 	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
-	LOCAL ECI TO getECI().
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.
-	LOCAL LVLHrelativePosition IS convertToLVLH(LVLH, relativePosition).
+	LOCAL LVLHrelativePosition IS VCMT(LVLH:Transform, relativePosition).
 
-	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*plusZ, relativePosition).
-	LOCAL LVLHrelativeVelocity IS convertToLVLH(LVLH, relativeVelocity).
-
-	LOCAL LVLHfinal IS getLVLHfromR(targetOrbit, targetPositionFinal).
-
-	LOCAL relativePositionFinal IS chaserPositionFinal - targetPositionFinal.
-	LOCAL LVLHrelativePositionFinal IS convertToLVLH(LVLHfinal, relativePositionFinal).
+	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*LVLH:basis:z, relativePosition).
+	LOCAL LVLHrelativeVelocity IS VCMT(LVLH:Transform, relativeVelocity).
 
 	LOCAL relativePositionMatrix IS GetMatrix().
 	SET relativePositionMatrix["MatrixSelf"] TO LIST(
@@ -573,14 +572,20 @@ declare function CWequationCurrentFromFuture {
 													LIST(LVLHrelativePositionFinal:Z)
 												).
 
-	LOCAL targetLVLHrelativeVelocity IS _CWfindVatT_(relativePositionMatrix, relativePositionFinalMatrix, n, time).
+	LOCAL targetLVLHrelativeVelocity TO _CWfindVatT_(relativePositionMatrix, relativePositionFinalMatrix, n, finalTime - initialTime).
+	LOCAL targetRelativeVelocity TO VCMT(LVLH:Inverse, targetLVLHrelativeVelocity).
 
-	LOCAL targetChaserVelocity IS LVLHrelativeVelocity + targetVelocity + VCRS(n*plusZ, relativePosition).
+	LOCAL targetChaserVelocity IS targetRelativeVelocity + targetVelocity + VCRS(n*LVLH:basis:z, relativePosition).
 
 	RETURN LEXICON(
-		"LVLHcurrentR", LVLHrelativePosition,
-		"LVLHcurrentV", LVLHrelativeVelocity,
-		"targetV", targetChaserVelocity).
+		"LVLHrelativePosition", LVLHrelativePosition,
+		"LVLHrelativeVelocity", LVLHrelativeVelocity,
+		"targetLVLHrelativeVelocity", targetLVLHrelativeVelocity,
+		"chaserVelocity", chaserVelocity,
+		"targetChaserVelocity", targetChaserVelocity,
+		"chaserPosition", chaserPosition,
+		"chaserOrbit", chaserOrbit
+	).
 }
 
 declare function _CWfindRatT_ {
@@ -619,15 +624,16 @@ declare function _CWfindVatT_ {
 
 
 	local Mtrans is GetMatrix().	//---------------Mtransition Matrix
-	set Mtrans["MatrixSelf"] to list(list(4-3*cos(_n*t), 	   0, 0),
-									 list(6*(sin(_n*t) - n*t),  1, 0),
-									 list(0,                   0, cos(_n*t))
+	set Mtrans["MatrixSelf"] to list(list(4-3*cos(_n*t), 	   			0, 				0),
+									 list(6*(sin(_n*t) - n*t),  		1, 				0),
+									 list(0,                   			0, 		cos(_n*t))
 									 ).
 	local Ntrans is GetMatrix().	//---------------Ntransition Matrix
-	set Ntrans["MatrixSelf"] to list(list((1/n)*sin(_n*t),          (2/n)*(1 - cos(_n*t)),     0),
-									 list((2/n)*(cos(_n*t) - 1), (1/n)*(4*sin(_n*t)-3*n*t), 0),
-									 list(0,                       0,                        (1/n)*sin(_n*t))
-									 ).
+	set Ntrans["MatrixSelf"] to list(
+									list((1/n)*sin(_n*t),				(2/n)*(1 - cos(_n*t)),								0),
+									list((2/n)*(cos(_n*t) - 1),			(1/n)*(4*sin(_n*t)-3*n*t),							0),
+									list(0,								0,										(1/n)*sin(_n*t))
+									).
 
 	 LOCAL NtransInverse IS MatrixFindInverse(Ntrans).
 	 LOCAL MR IS MatrixMultiply(Mtrans, currentR).

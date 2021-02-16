@@ -74,9 +74,16 @@ UNTIL (CurrentMode = "Shutdown") {
 	}
 	ELSE IF (CurrentMode = "debug") {
 		local basis is lexicon("x", v(1, 1, 0), "y", v(-1, 1, 0), "z", VCRS(v(1, 1, 0), v(-1, 1, 0))).
-		local vec is v(1, 0, 0).
-		local new_vec is convertToLVLH(basis, vec).
+		local tr to getTransform(basis).
+		local vec is v(-112, 450, -150).
+		print vec.
+		local new_vec is VectorMatrixMultiply(tr:Transform, vec).
 		print new_vec.
+		local new_vec2 to VectorMatrixMultiply(tr:Inverse, new_vec).
+		print new_vec2.
+		print vec:mag.
+		print new_vec2:mag.
+		print vec - new_vec2.
 
 		wait 1000.
 		ModeController("Shutdown").
@@ -196,51 +203,53 @@ UNTIL (CurrentMode = "Shutdown") {
 		SET TARGET TO "Soyuz Docking Target".
 		LOCAL ISS IS Vessel("Soyuz Docking Target").
 
-		wait 2.
+		local t to TIME:SECONDS + 3100.
 
-		LOCAL CurrentOrbit IS OrbitClass:COPY.
-		SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
+		LOCAL state TO CWequationFutureFromCurrent(
+			SHIP,
+			ISS,
+			0,
+			t - TIME:SECONDS
+		).
 
-		LOCAL TargetOrbit IS OrbitClass:COPY.
-		SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
+		LOCAL timeToRbar TO ABS(state:LVLHrelativePosition:Y)/ABS(state:LVLHrelativeVelocity:Y) + TIME:SECONDS.
+		print (timeToRbar - TIME:SECONDS).
 
-		LOCAL chaserPosition TO 0.
-		LOCAL targetPosition TO 0.
-		LOCAL chaserVelocity TO 0.
-		LOCAL targetVelocity TO 0.
+		local done is false.
+		UNTIL (done = true) {
 
-		LOCAL state to 0.
-
-		UNTIL (FALSE) {
-			SET chaserPosition TO RatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-			SET targetPosition TO RatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-			SET chaserVelocity TO VatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-			SET targetVelocity TO VatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-			SET state TO CWequationFutureFromCurrent(
-				chaserPosition,
-				chaserVelocity,
-				0,
-				TargetOrbit,
-				targetPosition,
-				targetVelocity
+			LOCAL state2 TO CWequationCurrentVelFromFuturePos(
+				SHIP,
+				ISS,
+				V(-1000, 0, 0),
+				5,
+				timeToRbar - TIME:SECONDS
 			).
 
+			LOCAL dV TO (state2:targetChaserVelocity - state2:chaserVelocity).
+			CLEARVECDRAWS().
+			vecdraw(v(0,0,0), dV, RGB(0,1,0), "pos", 1.0, true, 0.2, true, true).
 			clearscreen.
-			print "Current state: " at (0, 0).
-			print "posX: " + state:LVLHcurrentR:X at (0, 1).
-			print "posY: " + state:LVLHcurrentR:Y at (0, 2).
-			print "posZ: " + state:LVLHcurrentR:Z at (0, 3).
+			print dV:MAG at (0,0).
+			print state2:LVLHrelativeVelocity at (0,2).
+			print state2:targetLVLHrelativeVelocity at (0,4).
+			print state2:LVLHrelativePosition at (0,6).
 
-			print "velX: " + state:LVLHcurrentV:X at (0, 5).
-			print "velY: " + state:LVLHcurrentV:Y at (0, 6).
-			print "velZ: " + state:LVLHcurrentV:Z at (0, 7).
 
-			print "Future state: " at (0, 9).
-			print "posX: " + state:LVLHfutureR:X at (0, 10).
-			print "posY: " + state:LVLHfutureR:Y at (0, 11).
-			print "posZ: " + state:LVLHfutureR:Z at (0, 12).
+			local shipBasis to LEXICON("x", SHIP:FACING:STARVECTOR, "y", SHIP:FACING:UPVECTOR, "z", SHIP:FACING:FOREVECTOR).
+			local shipBasis to getTransform(shipBasis).
+			local dV_ to VCMT(shipBasis:Transform, dV).
+			SET SHIP:CONTROL:TRANSLATION TO dV_.
+
+			if(dV:MAG < 0.1) {
+				set ship:control:neutralize to true.
+				set done to true.
+			}
+
+			wait 0.1.
 		}
+
+		kuniverse:timewarp:WARPTO(timeToRbar).
+
 	}
 }

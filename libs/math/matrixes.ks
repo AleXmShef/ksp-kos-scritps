@@ -394,3 +394,42 @@ declare function MatrixAdd {
 
 	return m.
 }
+
+declare function MatrixFromVector {
+	declare parameter vec.
+
+	local m to GetMatrix().
+	set m:MatrixSelf to LIST().
+	m:MatrixSelf:ADD(list(vec:x)).
+	m:MatrixSelf:ADD(list(vec:y)).
+	m:MatrixSelf:ADD(list(vec:z)).
+	return m.
+}
+
+declare function BuildTransformMatrix {
+	declare parameter basis.
+
+	local x to basis:x.
+	local y to basis:y.
+	local z to basis:z.
+
+	local m to GetMatrix().
+
+	set m:MatrixSelf to list(
+		list(x:x, x:y, x:z),
+		list(y:x, y:y, y:z),
+		list(z:x, z:y, z:z)
+	).
+
+	return m.
+}
+
+declare function VCMT {
+	declare parameter m.
+	declare parameter v.
+
+	local vm to MatrixFromVector(v).
+
+	local mult to MatrixMultiply(m, vm):MatrixSelf.
+	return v(mult[0][0], mult[1][0], mult[2][0]).
+}
