@@ -50,7 +50,7 @@ ModeController("ParkingOrbit").
 
 
 UNTIL (CurrentMode = "Shutdown") {
-	IF (CurrentMode = "debug") {
+	IF (CurrentMode = "BurnDebug") {
 
 		rcs on.
 		SteeringManagerMaster(1).
@@ -72,16 +72,13 @@ UNTIL (CurrentMode = "Shutdown") {
 
 		ModeController("Shutdown").
 	}
-	ELSE IF (CurrentMode = "debug2") {
-		local curOrb to OrbitClass:copy.
-		set curOrb to UpdateOrbitParams(curOrb).
+	ELSE IF (CurrentMode = "debug") {
+		local basis is lexicon("x", v(1, 1, 0), "y", v(-1, 1, 0), "z", VCRS(v(1, 1, 0), v(-1, 1, 0))).
+		local vec is v(1, 0, 0).
+		local new_vec is convertToLVLH(basis, vec).
+		print new_vec.
 
-		local testOrb to BuildOrbitFromVR(SHIP:VELOCITY:ORBIT, SHIP:POSITION - SHIP:BODY:POSITION).
-
-		clearscreen.
-		print curOrb.
-		print "".
-		print testOrb.
+		wait 1000.
 		ModeController("Shutdown").
 	}
 	ELSE IF (CurrentMode = "Nothing") {
@@ -199,101 +196,7 @@ UNTIL (CurrentMode = "Shutdown") {
 		SET TARGET TO "Soyuz Docking Target".
 		LOCAL ISS IS Vessel("Soyuz Docking Target").
 
-		LOCAL CurrentOrbit IS OrbitClass:COPY.
-		SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
-
-		LOCAL TargetOrbit IS OrbitClass:COPY.
-		SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
-
-		LOCAL soyuzAverageAngularVelocity IS 360/CurrentOrbit["T"].
-		LOCAL targetAverageAngularVelocity IS 360/TargetOrbit["T"].
-
-		LOCAL chaserPosition IS RatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-		LOCAL targetPosition IS RatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-
-		LOCAL chaserVelocity IS VatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-		LOCAL targetVelocity IS VatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-		DECLARE FUNCTION timeToRbarFunc {
-			LOCAL timeToRbar IS 500.
-			LOCAL additive IS 100.
-			LOCAL pos IS LEXICON("y", 10000000000000).
-			LOCAL converged IS FALSE.
-			LOCAL counter IS 0.
-			UNTIL (converged = TRUE) {
-				SET timeToRbar TO timeToRbar + additive.
-				LOCAL _pos IS CWequation(chaserPosition, chaserVelocity, timeToRbar, TargetOrbit, targetPosition, targetVelocity).
-				IF (abs(_pos["y"]) > abs(pos["y"])) {
-					if(counter > 0) {
-						SET additive TO additive * -0.5.
-						SET counter TO 0.
-					}
-					else
-						SET counter TO counter + 1.
-				}
-				SET pos TO _pos.
-
-				IF (abs(additive) < 0.01)
-					SET converged TO TRUE.
-			}
-			RETURN timeToRbar.
-		}
-		local timeToRbar is timeToRbarFunc().
-		LOCAL _timeToRbar IS time:seconds + timeToRbar.
-
-		local RBarTargetPosition is RatAngle(TargetOrbit, AngleAtT(TargetOrbit, ISS:ORBIT:TRUEANOMALY, _timeToRbar - time:seconds)).
-		local RBarChaserPosition is RBarTargetPosition:vec.
-		set RBarChaserPosition:mag to RBarChaserPosition:MAG - 1000.
-
-		SteeringManagerSetMode("Vessel", ISS).
-
-		CWequationCorrectionBurn(RBarChaserPosition, _timeToRbar, ISS).
-
-		LOCAL warpToTime IS _timeToRbar.
-		KUNIVERSE:TIMEWARP:WARPTO(warpToTime -6*60).
-		WAIT UNTIL (ISS:POSITION:MAG < 1600 AND VANG(SHIP:FACING:FOREVECTOR, ISS:POSITION) < 1).
-
-		LOCAL arrivedToRbar IS FALSE.
-		UNTIL (arrivedToRbar) {
-			SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
-			SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
-
-			LOCAL chaserPosition IS RatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-			LOCAL targetPosition IS RatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-
-			LOCAL chaserVelocity IS VatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
-			LOCAL targetVelocity IS VatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
-
-			local RBarTargetPosition is RatAngle(TargetOrbit, AngleAtT(TargetOrbit, ISS:ORBIT:TRUEANOMALY, _timeToRbar - time:seconds)).
-			local RBarChaserPosition is RBarTargetPosition:vec.
-			set RBarChaserPosition:mag to RBarChaserPosition:MAG - 1000.
-
-			LOCAL arrivalPos IS CWequation(chaserPosition, chaserVelocity, _timeToRbar - TIME:SECONDS, TargetOrbit, targetPosition, targetVelocity).
-			WAIT 1.
-
-			IF(abs(arrivalPos["y"]) > 180 OR abs(abs(arrivalPos["x"]) - 1000) > 100 OR abs(arrivalPos["z"]) > 100) {
-				CWequationCorrectionBurn(RBarChaserPosition, _timeToRbar, ISS, 2).
-			}
-			IF(abs(arrivalPos["curY"]) < 180 AND abs(abs(arrivalPos["curX"]) - 1000) < 100 AND abs(arrivalPos["curZ"]) < 100
-			OR _timeToRbar - time:seconds < 1) {
-				SET arrivedToRbar TO TRUE.
-			}
-			WAIT 2.
-		}
-
-		ModeController("TerminalPhase").
-	}
-	ELSE IF (CurrentMode = "TerminalPhase") {
-		LOCAL ISS IS Vessel("Soyuz Docking Target").
-		SteeringManagerSetMode("Vessel", ISS).
-
-		SET ISS:LOADDISTANCE:ORBIT:UNPACK TO 1800.
-		SET ISS:LOADDISTANCE:ORBIT:PACK TO 1900.
-
-		WAIT UNTIL (VANG(SHIP:FACING:FOREVECTOR, ISS:POSITION) < 1).
-		WAIT 3.
+		wait 2.
 
 		LOCAL CurrentOrbit IS OrbitClass:COPY.
 		SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
@@ -301,187 +204,43 @@ UNTIL (CurrentMode = "Shutdown") {
 		LOCAL TargetOrbit IS OrbitClass:COPY.
 		SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
 
-		LOCAL arrivalTime IS time:seconds + 500.
-		LOCAL arrivedToHP1 IS FALSE.
-		UNTIL (arrivedToHP1) {
-			SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
-			SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
+		LOCAL chaserPosition TO 0.
+		LOCAL targetPosition TO 0.
+		LOCAL chaserVelocity TO 0.
+		LOCAL targetVelocity TO 0.
 
-			LOCAL chaserPosition IS SHIP:POSITION - SHIP:BODY:POSITION.
-			LOCAL targetPosition IS ISS:POSITION - SHIP:BODY:POSITION..
+		LOCAL state to 0.
 
-			LOCAL chaserVelocity IS SHIP:VELOCITY:ORBIT.
-			LOCAL targetVelocity IS ISS:VELOCITY:ORBIT.
+		UNTIL (FALSE) {
+			SET chaserPosition TO RatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
+			SET targetPosition TO RatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
 
-			local RBarTargetPosition is RatAngle(TargetOrbit, AngleAtT(TargetOrbit, ISS:ORBIT:TRUEANOMALY, arrivalTime - time:seconds)).
-			local RBarChaserPosition is RBarTargetPosition:vec.
-			set RBarChaserPosition:mag to RBarChaserPosition:MAG - 500.
+			SET chaserVelocity TO VatAngle(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY).
+			SET targetVelocity TO VatAngle(TargetOrbit, ISS:ORBIT:TRUEANOMALY).
 
-			LOCAL arrivalPos IS CWequation(chaserPosition, chaserVelocity, arrivalTime - TIME:SECONDS, TargetOrbit, targetPosition, targetVelocity).
-			WAIT 1.
+			SET state TO CWequationFutureFromCurrent(
+				chaserPosition,
+				chaserVelocity,
+				0,
+				TargetOrbit,
+				targetPosition,
+				targetVelocity
+			).
 
-			IF(abs(arrivalPos["y"]) > 15 OR abs(abs(arrivalPos["x"]) - 500) > 40 OR abs(arrivalPos["z"]) > 10) {
-				set kuniverse:timewarp:warp to 0.
-				WAIT 1.
-				CWequationCorrectionBurn(RBarChaserPosition, arrivalTime, ISS, 2).
-			}
-			ELSE {
-				set kuniverse:timewarp:mode to "PHYSICS".
-				set kuniverse:timewarp:warp to 3.
-			}
-			IF(abs(arrivalPos["curY"]) < 15 AND abs(abs(arrivalPos["curX"]) - 500) < 40 AND abs(arrivalPos["curZ"]) < 15
-			OR arrivalTime - time:seconds < 1) {
-				set kuniverse:timewarp:warp to 0.
-				SET arrivedToHP1 TO TRUE.
-			}
-			WAIT 1.
-		}
-		WAIT 2.
-		SET arrivalTime TO TIME:SECONDS + 650.
-		LOCAL arrivedToHP2 IS FALSE.
-		UNTIL (arrivedToHP2) {
-			SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
-			SET TargetOrbit TO UpdateOrbitParams(TargetOrbit, ISS:ORBIT).
+			clearscreen.
+			print "Current state: " at (0, 0).
+			print "posX: " + state:LVLHcurrentR:X at (0, 1).
+			print "posY: " + state:LVLHcurrentR:Y at (0, 2).
+			print "posZ: " + state:LVLHcurrentR:Z at (0, 3).
 
-			LOCAL chaserPosition IS SHIP:POSITION - SHIP:BODY:POSITION.
-			LOCAL targetPosition IS ISS:POSITION - SHIP:BODY:POSITION..
+			print "velX: " + state:LVLHcurrentV:X at (0, 5).
+			print "velY: " + state:LVLHcurrentV:Y at (0, 6).
+			print "velZ: " + state:LVLHcurrentV:Z at (0, 7).
 
-			LOCAL chaserVelocity IS SHIP:VELOCITY:ORBIT.
-			LOCAL targetVelocity IS ISS:VELOCITY:ORBIT.
-
-			local RBarTargetPosition is RatAngle(TargetOrbit, AngleAtT(TargetOrbit, ISS:ORBIT:TRUEANOMALY, arrivalTime - time:seconds)).
-			local RBarChaserPosition is RBarTargetPosition:vec.
-			set RBarChaserPosition:mag to RBarChaserPosition:MAG - 50.
-
-			LOCAL arrivalPos IS CWequation(chaserPosition, chaserVelocity, arrivalTime - TIME:SECONDS, TargetOrbit, targetPosition, targetVelocity).
-			WAIT 1.
-
-			IF(abs(arrivalPos["y"]) > 5 OR abs(abs(arrivalPos["x"]) - 50) > 5 OR abs(arrivalPos["z"]) > 3) {
-				set kuniverse:timewarp:warp to 0.
-				WAIT 1.
-				CWequationCorrectionBurn(RBarChaserPosition, arrivalTime, ISS, 2).
-			}
-			ELSE {
-				set kuniverse:timewarp:mode to "PHYSICS".
-				set kuniverse:timewarp:warp to 3.
-			}
-			IF(abs(arrivalPos["curY"]) < 5 AND abs(abs(arrivalPos["curX"]) - 50) < 5 AND abs(arrivalPos["curZ"]) < 3
-			OR arrivalTime - time:seconds < 1) {
-				SET arrivedToHP2 TO TRUE.
-				set kuniverse:timewarp:warp to 0.
-			}
-			WAIT 1.
-		}
-		WAIT 2.
-		LOCAL proceedToDocking IS FALSE.
-		set CONFIG:IPU TO 1500.
-		UNTIL (proceedToDocking) {
-
-			LOCAL dV IS ISS:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT.
-
-			LOCAL shipBasis IS LEXICON("x", SHIP:FACING:STARVECTOR, "y", SHIP:FACING:TOPVECTOR, "z", SHIP:FACING:FOREVECTOR).
-
-			IF(dV:MAG < 0.005) {
-				SET SHIP:CONTROL:TRANSLATION TO V(0, 0, 0).
-			}
-			ELSE {
-				SET dV to dV*10.
-				LOCAL burnVector IS convertToLVLH(shipBasis, dV).
-				LOCAL starVec is burnVector["x"].
-				LOCAL topVec is burnVector["y"].
-				LOCAL foreVec is burnVector["z"].
-
-				LOCAL starScalar is starVec:mag.
-				// IF(starScalar < 0.1)
-				// 	SET starScalar TO 0.1.
-				if(vang(ship:facing:starvector, starVec) > 90)
-					set starScalar to starScalar*-1.
-
-				LOCAL topScalar is topVec:mag.
-				// IF(topScalar < 0.1)
-				// 	SET topScalar TO 0.1.
-				if(vang(ship:facing:topvector, topVec) > 90)
-					set topScalar to topScalar*-1.
-
-				LOCAL foreScalar is foreVec:mag.
-				// IF(foreScalar < 0.1)
-				// 	SET foreScalar TO 0.1.
-				if(vang(ship:facing:forevector, foreVec) > 90)
-					set foreScalar to foreScalar*-1.
-
-				LOCAL transVec IS V(starScalar, topScalar, foreScalar).
-				SET SHIP:CONTROL:TRANSLATION TO transVec.
-			}
-			IF(TERMINAL:INPUT:HASCHAR) {
-				SET proceedToDocking TO TRUE.
-				SET config:ipu to 700.
-			}
-			wait 0.
-		}
-
-		ModeController("Docking").
-	}
-	ELSE IF(CurrentMode = "Docking") {
-		LOCAL ISS IS Vessel("Soyuz Docking Target").
-
-		LOCAL dockingPort IS ISS:DOCKINGPORTS[0].
-		SteeringManagerSetMode("Vessel", dockingPort).
-
-		LOCAL docked IS FALSE.
-		UNTIL (docked) {
-			LOCAL portAxis IS dockingPort:FACING:FOREVECTOR.
-			LOCAL relativePosition IS -1*dockingPort:POSITION.
-			LOCAL relativeVelocity IS SHIP:VELOCITY:ORBIT - ISS:VELOCITY:ORBIT.
-
-			LOCAL distanceToPortAxis IS portAxis:NORMALIZED * COS(VANG(relativePosition, portAxis)) * relativePosition:MAG - relativePosition.
-
-			CLEARVECDRAWS().
-
-			VECDRAW(dockingPort:POSITION, relativePosition, rgb(0, 1, 0), "pos", 1, true).
-			VECDRAW(dockingPort:POSITION, portAxis, rgb(1, 0, 0), "axis", 1, true).
-			VECDRAW(V(0,0,0), distanceToPortAxis, rgb(0, 0, 1), "dist", 1, true).
-
-			LOCAL tangentDv IS distanceToPortAxis:NORMALIZED * (MIN(1, distanceToPortAxis:MAG)) * 0.2.
-			LOCAL _dV IS tangentDv.
-
-			IF(distanceToPortAxis:MAG < 0.5) {
-				SET _dV TO _dV + portAxis:NORMALIZED * -0.1.
-			}
-
-			LOCAL dV IS _dV - relativeVelocity.
-
-			LOCAL shipBasis IS LEXICON("x", SHIP:FACING:STARVECTOR, "y", SHIP:FACING:TOPVECTOR, "z", SHIP:FACING:FOREVECTOR).
-
-			IF(dV:MAG < 0.005) {
-				SET SHIP:CONTROL:TRANSLATION TO V(0, 0, 0).
-			}
-			ELSE {
-				SET dV to dV*10.
-				LOCAL burnVector IS convertToLVLH(shipBasis, dV).
-				LOCAL starVec is burnVector["x"].
-				LOCAL topVec is burnVector["y"].
-				LOCAL foreVec is burnVector["z"].
-
-				LOCAL starScalar is starVec:mag.
-				if(vang(ship:facing:starvector, starVec) > 90)
-					set starScalar to starScalar*-1.
-
-				LOCAL topScalar is topVec:mag.
-				if(vang(ship:facing:topvector, topVec) > 90)
-					set topScalar to topScalar*-1.
-
-				LOCAL foreScalar is foreVec:mag.
-				if(vang(ship:facing:forevector, foreVec) > 90)
-					set foreScalar to foreScalar*-1.
-
-				LOCAL transVec IS V(starScalar, topScalar, foreScalar).
-				SET SHIP:CONTROL:TRANSLATION TO transVec.
-			}
-			IF(dockingPort:POSITION:MAG < 0.5) {
-				SET SHIP:CONTROL:TRANSLATION TO V(0, 0, 0).
-				SET docked TO TRUE.
-			}
-			wait 0.
+			print "Future state: " at (0, 9).
+			print "posX: " + state:LVLHfutureR:X at (0, 10).
+			print "posY: " + state:LVLHfutureR:Y at (0, 11).
+			print "posZ: " + state:LVLHfutureR:Z at (0, 12).
 		}
 	}
 }

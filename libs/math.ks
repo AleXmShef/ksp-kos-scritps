@@ -6,9 +6,9 @@ clearscreen.
 function libDl2 {
 	parameter libs is list().
 	for lib in libs {
-		if not exists(storagePath + "/libs/" + lib + ".ks") {
+		//if not exists(storagePath + "/libs/" + lib + ".ks") {
 			copypath("0:/libs/math/" + lib + ".ks", storagePath + "/libs/").
-		}
+		//}
 	}
 	for lib in libs {
 		runpath(storagePath + "/libs/" + lib + ".ks").

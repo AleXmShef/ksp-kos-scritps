@@ -7,41 +7,49 @@ declare global MatrixClass is lexicon (
 							"Determinant", 0
 ).
 
+declare function GetMatrix {
+	return lexicon (
+								"MatrixSelf", 0,
+								"Inverse", 0,
+								"Determinant", 0
+	).
+}
+
 declare function BuildMatrix {
 	declare parameter m.
-	
-	
+
+
 }
 
 declare function MatrixBuildZero {
 	declare parameter z.
 	declare parameter n.
-	
+
 	local i to 0.
-	
+
 	local m to MatrixClass:copy.
 	set m["MatrixSelf"] to list().
-	
+
 	local row to list().
-	
+
 	until (i = n) {
 		row:add(0).
 		set i to i + 1.
 	}
-	
+
 	set i to 0.
 	until (i = z) {
 		m["MatrixSelf"]:add(row:copy).
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
-	
+
 declare function MatrixFindInverse {
 	declare parameter m.
 	local n to m["MatrixSelf"]:length.
-	
+
 	if (MatrixFindDeterminant(m, n) = 0)
 		return 0.
 	return MatrixCalcCofactor(m, n, MatrixFindDeterminant(m, n)).
@@ -51,13 +59,13 @@ declare function MatrixFindDeterminant {
 	//print "FindDeterminant".
 	declare parameter a.
 	declare parameter n.
-	
-	
+
+
 	local b to MatrixBuildZero(n,n).
 	local sum to 0.
-	if (n = 1) 
+	if (n = 1)
 		return a["MatrixSelf"][0][0].
-	else if (n = 2) 
+	else if (n = 2)
 		return (a["MatrixSelf"][0][0]*a["MatrixSelf"][1][1] - a["MatrixSelf"][0][1]*a["MatrixSelf"][1][0]).
 	else {
 		local i to 0.
@@ -75,12 +83,12 @@ declare function MatrixTranspose {
 	//declare parameter d.
 	declare parameter n.
 	declare parameter det.
-	
+
 	local f to MatrixBuildZero(n, n).
 	local b to MatrixBuildZero(n, n).
 	local i to 0.
 	local j to 0.
-	
+
 	set i to 0.
 	until (i = n) {
 		set j to 0.
@@ -90,7 +98,7 @@ declare function MatrixTranspose {
 		}
 		set i to i+1.
 	}
-	
+
 	set i to 0.
 	until (i = n) {
 		set j to 0.
@@ -101,7 +109,7 @@ declare function MatrixTranspose {
 		set i to i+1.
 	}
 	return f.
-	
+
 }
 
 declare function MatrixCalcCofactor {
@@ -109,7 +117,7 @@ declare function MatrixCalcCofactor {
 	//declare parameter d.
 	declare parameter n.
 	declare parameter det.
-	
+
 	local b to MatrixBuildZero(n, n).
 	local c to MatrixBuildZero(n, n).
 	local l to 0.
@@ -118,14 +126,14 @@ declare function MatrixCalcCofactor {
 	local k to 0.
 	local i to 0.
 	local j to 0.
-	
+
 	set h to 0.
 	until (h = n) {
 		set l to 0.
 		until (l = n) {
 			set m to 0.
 			set k to 0.
-			
+
 			set i to 0.
 			until (i = n) {
 				set j to 0.
@@ -158,13 +166,13 @@ declare function MatrixFindMinor {
 	declare parameter a.
 	declare parameter i.
 	declare parameter n.
-	
-	
+
+
 	local l to 1.
 	local j to 0.
 	local h to 0.
 	local k to 0.
-	
+
 	until (l = n) {
 		set j to 0.
 		until (j = n) {
@@ -186,13 +194,13 @@ declare function MatrixFindMinor {
 declare function MatrixMultiply {
 	declare parameter m1.
 	declare parameter m2.
-	
+
 	local m to MatrixBuildZero(m1["MatrixSelf"]:length, m2["MatrixSelf"][0]:length).
-	
+
 	local i to 0.
 	local j to 0.
 	local k to 0.
-	
+
 	until (i = m1["MatrixSelf"]:length) {
 		set j to 0.
 		until (j = m2["MatrixSelf"][0]:length) {
@@ -205,13 +213,13 @@ declare function MatrixMultiply {
 		}
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
 
 declare function MatrixTriangulate {
 	declare parameter m.
-	
+
 	local i to 0.
 	local j to 0.
 	until (i = m["MatrixSelf"]:length) {
@@ -219,9 +227,9 @@ declare function MatrixTriangulate {
 		if (i <> ColMax[1]) {
 			set m to MatrixSwapRow(m, ColMax[1], 0).
 		}
-		
+
 		set j to i + 1.
-		
+
 		until j = (m["MatrixSelf"]:length) {
 			set mult to -1*((m["MatrixSelf"][j][i])/(m["MatrixSelf"][i][i])).
 			set temp to m["MatrixSelf"][i].
@@ -240,11 +248,11 @@ declare function MatrixTriangulate {
 declare function MatrixColumnMax {
 	declare parameter m.
 	declare parameter column.
-	
+
 	local result to list(0, 0).
 	set result[0] to 0.
 	local i to 0.
-	
+
 	for c in m["MatrixSelf"] {
 		if (m["MatrixSelf"][i][column] > result[0]) {
 			set result[0] to m["MatrixSelf"][i][column].
@@ -252,7 +260,7 @@ declare function MatrixColumnMax {
 		}
 		set i to i + 1.
 	}
-	
+
 	return result.
 }
 
@@ -260,11 +268,11 @@ declare function MatrixSwapRow {
 	declare parameter m.
 	declare parameter r1.
 	declare parameter r2.
-	
+
 	set temp to m["MatrixSelf"][r1].
 	set m["MatrixSelf"][r1] to m["MatrixSelf"][r2].
 	set m["MatrixSelf"][r2] to temp.
-	
+
 	return m.
 }
 
@@ -272,13 +280,13 @@ declare function MatrixMultiplyRow {
 	declare parameter m.
 	declare parameter r.
 	declare parameter s.
-	
+
 	local i to 0.
 	for e in m["MatrixSelf"][r] {
 		set m["MatrixSelf"][r][i] to m["MatrixSelf"][r][i]*s.
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
 
@@ -286,31 +294,31 @@ declare function MatrixAddTwoRows {
 	declare parameter m.
 	declare parameter r1.
 	declare parameter r2.
-	
+
 	local i to 0.
 	for e in m["MatrixSelf"][r1] {
 		set m["MatrixSelf"][r1][i] to m["MatrixSelf"][r1][i] + m["MatrixSelf"][r2][i].
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
 
 declare function MatrixConstructTwoMatrixes {
 	declare parameter m1.
 	declare parameter m2.
-	
+
 	local resm to MatrixClass:copy.
 	local i to 0.
-	
+
 	until (i = m1["MatrixSelf"]:length) {
 		resm["MatrixSelf"]:add(m1["MatrixSelf"][i]).
 		set i to i + 1.
 	}
-	
+
 	local i to 0.
 	local j to 0.
-	
+
 	until (i = m1["MatrixSelf"]:length) {
 		until (j = m2["MatrixSelf"][0]:length) {
 			resm["MatrixSelf"][i]:add(m2["MatrixSelf"][i][j]).
@@ -320,7 +328,7 @@ declare function MatrixConstructTwoMatrixes {
 		set j to 0.
 	}
 	return resm.
-	
+
 }
 
 declare function MatrixPrint {
@@ -330,10 +338,10 @@ declare function MatrixPrint {
 		print 0.
 		return 0.
 	}
-	
+
 	local i to 0.
 	local j to 0.
-	
+
 	until (i = m["MatrixSelf"]:length) {
 		set j to 0.
 		until (j = m["MatrixSelf"][0]:length) {
@@ -348,12 +356,12 @@ declare function MatrixPrint {
 declare function MatrixSubtract {
 	declare parameter m1.
 	declare parameter m2.
-	
+
 	local m to MatrixBuildZero(m1["MatrixSelf"]:length, m1["MatrixSelf"][0]:length).
-	
+
 	local i to 0.
 	local j to 0.
-	
+
 	until (i = m1["MatrixSelf"]:length) {
 		set j to 0.
 		until (j = m1["MatrixSelf"][0]:length) {
@@ -362,19 +370,19 @@ declare function MatrixSubtract {
 		}
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
 
 declare function MatrixAdd {
 	declare parameter m1.
 	declare parameter m2.
-	
+
 	local m to MatrixBuildZero(m1["MatrixSelf"]:length, m1["MatrixSelf"][0]:length).
-	
+
 	local i to 0.
 	local j to 0.
-	
+
 	until (i = m1["MatrixSelf"]:length) {
 		set j to 0.
 		until (j = m1["MatrixSelf"][0]:length) {
@@ -383,15 +391,6 @@ declare function MatrixAdd {
 		}
 		set i to i + 1.
 	}
-	
+
 	return m.
 }
-
-
-
-
-
-
-
-
-
