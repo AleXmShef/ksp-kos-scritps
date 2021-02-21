@@ -46,12 +46,12 @@ GLOBAL sequence IS LIST(
 					LEXICON("time", 122, "type", "stage", "message", "Blocks B, V, G, D jettison"),
 					LEXICON("time", 130, "type", "warp", "dur", 150, "message", "Warping through 2nd stage"),
 					LEXICON("time", 140, "type", "jettison", "message", "Fairing jettison", "massLost", 1766),
-					LEXICON("time", 300, "type", "warp", "dur", 200, "message", "Warping through 3rd stage"),
+					LEXICON("time", 300, "type", "warp", "dur", 235, "message", "Warping through 3rd stage"),
 					LEXICON("time", 305, "type", "jettison", "message", "RD0110 fairing jettison", "massLost", 4)
 ).
 GLOBAL controls IS LEXICON(
 					"launchTimeAdvance", 150,
-					"verticalAscentTime", 14,	
+					"verticalAscentTime", 14,
 					"pitchoverGuidanceMode", "parabolic",
 					"terminatingPitch", 31,
 					"upfgActivation", 129

@@ -1,4 +1,7 @@
 @lazyglobal off.
+
+Import(list("globals", "vectors", "matrixes", "lambertsolver")).
+
 declare function calcBurnTime {
 	declare parameter DeltaV.
 	declare parameter thr.
@@ -26,256 +29,7 @@ declare function calcDeltaVfromBurnTime {
 	return DeltaV.
 }
 
-declare global Globals is lexicon(
-						"G", SHIP:ORBIT:BODY:MU/SHIP:ORBIT:BODY:MASS,
-						"M", SHIP:ORBIT:BODY:MASS,
-						"mu", SHIP:ORBIT:BODY:MU,
-						"R", SHIP:ORBIT:BODY:RADIUS,
-						"EarthRotationSpeed", 360/SHIP:ORBIT:BODY:ROTATIONPERIOD
-).
-
-declare global OrbitClass is lexicon(
-						"Ap", 0,
-						"Pe", 0,
-						"Inc", 0,
-						"LAN", 0,
-						"AoP", 0, //Argument of periapsis
-						"T", 0,
-						"a", 0, //Semi-Major Axis
-						"e", 0, //Eccentricity
-						"p", 0,
-						"h", 0
-).
-
-declare function BuildOrbitFromVR {
-	declare parameter v.
-	declare parameter r.
-
-	local orb to OrbitClass:copy.
-
-	local v_eci to toIRF(v).
-	local r_eci to toIRF(r).
-	local h_eci to VCRS(r_eci, v_eci).
-	local k_eci to toIRF(V(0,1,0)).
-	local n_eci to VCRS(k_eci, h_eci).
-	local e_eci to (VCRS(v_eci, h_eci)/Globals["mu"]) - r_eci:NORMALIZED.
-
-
-	local e to e_eci:MAG.
-
-	local a to 1/(2/r:MAG - (v:mag*v:mag)/Globals["mu"]).
-
-	local p to a * (1 - e * e).
-
-
-	local LAN to arccos(n_eci:X/n_eci:MAG).
-	if(n_eci:Y < 0)
-		set LAN to 360 - LAN.
-
-	local AoP to arccos(VDOT(n_eci, e_eci)/(n_eci:MAG*e_eci:MAG)).
-	if(e_eci:Z < 0)
-		set AoP to 360 - AoP.
-
-	local Inc to VANG(v(0,0,1), h_eci).
-
-	set orb["Inc"] to Inc.
-	set orb["LAN"] to LAN.
-	set orb["AoP"] to AoP.
-	set orb["a"] to a.
-	set orb["e"] to e.
-	set orb["h"] to h_eci:MAG.
-	set orb["p"] to p.
-	set orb["T"] to 2*CONSTANT:PI*sqrt((orb["a"] * orb["a"] * orb["a"])/Globals["mu"]).
-	set orb["Ap"] to RatAngle(orb, 180):MAG.
-	set orb["Pe"] to RatAngle(orb, 0):MAG.
-
-	return orb.
-}
-
-declare function BuildOrbit {
-	declare parameter orb.
-	set orb["a"] to (orb["Ap"] + orb["Pe"])/2.
-	set orb["T"] to 2*CONSTANT:PI*sqrt((orb["a"] * orb["a"] * orb["a"])/Globals["mu"]).
-	set orb["e"] to (orb["Ap"] - orb["Pe"])/(orb["Ap"] + orb["Pe"]).
-	set orb["p"] to orb["a"]*(1-orb["e"]*orb["e"]).
-	set orb["h"] to sqrt(orb["p"]*Globals["mu"]).
-	return orb.
-}
-
-declare function UpdateOrbitParams {
-	declare parameter _orb to ship:ORBIT.
-
-	local orb to OrbitClass:COPY.
-
-	set orb["Ap"] to _orb:APOAPSIS + Globals["R"].
-	set orb["Pe"] to _orb:PERIAPSIS + Globals["R"].
-	set orb["Inc"] to _orb:INCLINATION.
-	set orb["LAN"] to _orb:LAN.
-	set orb["AoP"] to _orb:ARGUMENTOFPERIAPSIS.
-	set orb["T"] to _orb:period.
-	set orb["a"] to _orb:SEMIMAJORAXIS.
-	set orb["e"] to _orb:ECCENTRICITY.
-	set orb["p"] to orb["a"]*(1-orb["e"]*orb["e"]).
-	set orb["h"] to sqrt(orb["p"]*Globals["mu"]).
-
-	return orb.
-}
-
-declare function RatAngle {
-	declare parameter orb.
-	declare parameter angle to 0.
-
-	local vec to ANNorm(orb["LAN"], orb["Inc"]):forevector. //Vector alongside AN/DN axis
-
-	local axis to ANNorm(orb["LAN"], orb["Inc"]):upvector.	//Orbit normal vector
-
-	local r to Vrot(vec, axis, -1*(orb["AoP"] + angle)).	//Rotating vector to desired true anomaly
-
-	set r:mag to (orb["p"]/(1 + orb["e"] * cos(angle))).	//Orbit altitude at given true anomaly
-
-	return r.
-}
-
-declare function VatR {
-	declare parameter orb.
-	declare parameter r.
-
-	declare local angle to arccos((orb["p"] - r)/(orb["e"]*r)).
-
-	return VatAngle(orb, 360 - angle).
-}
-
-declare function AngleAtT {
-	declare parameter orbit.
-	declare parameter currentTrueAnomaly.
-	declare parameter time.
-
-	LOCAL currentEccentricAnomaly IS ARCTAN(TAN(currentTrueAnomaly/2)/SQRT((1 + orbit["e"])/(1 - orbit["e"])))*2.
-	LOCAL currentMeanAnomaly IS currentEccentricAnomaly - orbit["e"]*SIN(currentEccentricAnomaly).
-
-	LOCAL currentMeanMotion IS 360/orbit["T"].
-
-	LOCAL futureMeanAnomaly IS currentMeanAnomaly + time*currentMeanMotion.
-	UNTIL (futureMeanAnomaly < 360)
-		SET futureMeanAnomaly TO futureMeanAnomaly - 360.
-	SET futureMeanAnomaly TO futureMeanAnomaly * CONSTANT:PI/180.
-
-	LOCAL futureEccentricAnomaly IS EuclidNewtonianSolver(futureMeanAnomaly, orbit).
-	LOCAL futureTrueAnomaly to 2*ARCTAN(SQRT((1 + orbit["e"])/(1 - orbit["e"]))*TAN((futureEccentricAnomaly * 180/CONSTANT:PI)/2)).
-
-	RETURN futureTrueAnomaly.
-}
-
-declare function RatAngle_old {
-	declare parameter orb.
-	declare parameter angle to 0.
-
-	return (orb["p"]/(1 + orb["e"] * cos(angle))).
-}
-
-declare function VatR_old {
-	declare parameter orb.
-	declare parameter r.
-
-	return sqrt(Globals["mu"] * ((2/r)-(1/orb["a"]))).
-}
-
-declare function VatAngle {
-	declare parameter orb.
-	declare parameter angle.
-
-	local PosVec to RatAngle(orb, angle).
-
-	local axis to ANNorm(orb["LAN"], orb["Inc"]):upvector.
-
-	local VelVec to PosVec:vec.
-	set VelVec:mag to sqrt(Globals["mu"] * ((2/PosVec:mag)-(1/orb["a"]))).
-
-	LOCAL idk IS orb["h"]/(PosVec:mag*VelVec:mag).
-	IF (idk < -1)
-		SET idk TO -1.
-	IF (idk > 1)
-		SET idk TO 1.
-	local depF to arccos(idk).
-
-	if (angle > 180 or angle <= 0)
-		set depF to depF*-1.
-	local VelVec2 to Vrot(VelVec, axis, -1*(90 - depF)).
-
-	return VelVec2.
-}
-
-declare function TtoR {
-	declare parameter orb.
-	declare parameter depPhi.
-	declare parameter tgtPhi.
-
-	local r1 to RatAngle(orb, depPhi).
-	local r2 to RatAngle(orb, tgtPhi).
-
-	local E1 to arccos((orb["a"] - r1:mag)/(orb["e"]*orb["a"])).
-	local E2 to arccos((orb["a"] - r2:mag)/(orb["e"]*orb["a"])).
-
-	local M1 to (E1 * constant:PI/180 - orb["e"]*sin(E1)).
-	local M2 to (E2 * constant:PI/180 - orb["e"]*sin(E2)).
-
-	local t1 is 0.
-	local t2 is 0.
-
-	if (tgtPhi > 180 and depPhi > 180) {
-		if (tgtPhi > depPhi) {
-			set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-			set t1 to t1 + (orb["T"]/2 - t1)*2.
-			set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-			set t2 to t2 + (orb["T"]/2 - t2)*2.
-		}
-		else if (tgtPhi < depPhi) {
-			set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-			set t1 to t1*-1.
-			set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-			set t2 to t2 + (orb["T"]/2 - t2)*2.
-		}
-	}
-	else if (tgtPhi > 180 and depPhi < 180) {
-		set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-		set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-		set t2 to t2 + (orb["T"]/2 - t2)*2.
-	}
-	else if (tgtPhi < 180 and depPhi > 180) {
-		set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-		set t1 to t1*-1.
-		set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-	}
-	else if (tgtPhi < depPhi) {
-		set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-		set t1 to orb["T"] - t1.
-		set t1 to t1*-1.
-		set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-	}
-	else if (tgtPhi > depPhi) {
-		set t1 to M1*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-		set t2 to M2*sqrt((orb["a"]*orb["a"]*orb["a"])/Globals["mu"]).
-	}
-
-	local t is t2 - t1.
-
-	return t.
-}
-
-declare function EuclidNewtonianSolver {
-	declare parameter M.
-	declare parameter orb.
-	local E to M.
-	until (false) {
-		local dE to (E - orb["e"] * sin(E) - M)/(1-orb["e"]*cos(E)).
-		set E to E - dE.
-		if (abs(dE) < 0.0000001)
-			break.
-	}
-	return E.
-}
-
-declare function RendezvousTransferDemo {
+declare function RendezvousTransfer {
 	CLEARVECDRAWS().
 	terminal:input:clear().
 	declare parameter chaserOrbit.
@@ -427,7 +181,7 @@ declare function RendezvousTransferDemo {
 
 		LOCAL targetV IS VatAngle(hohmannTransferOrbit, 359.9).
 		SET node TO nodeFromV(chaserOrbit, r1, VatAngle(chaserOrbit, chaserTrueAnomaly + coastTimeBeforeBurn*chaserAverageAngularVelocity), targetV).
-		//SET node TO OrbitTransferDemo(chaserOrbit, hohmannTransferOrbit).
+		//SET node TO OrbitTransfer(chaserOrbit, hohmannTransferOrbit).
 		//PRINT "deltaV: " + node["dV"] at (0,1).
 		SET _coastTimeBeforeBurn TO coastTimeBeforeBurn.
 		SET _burnCoastTime TO burnCoastTime.
@@ -501,15 +255,15 @@ declare function CWequationFutureFromCurrent {
 
 	IF (finalTime <> 0) {
 
-		LOCAL relativePositionMatrix TO GetMatrix().
-		SET relativePositionMatrix["MatrixSelf"] TO LIST(
+		LOCAL relativePositionMatrix TO LIST().
+		SET relativePositionMatrix TO LIST(
 														LIST(LVLHrelativePosition:X),
 														LIST(LVLHrelativePosition:Y),
 														LIST(LVLHrelativePosition:Z)
 													).
 
-		LOCAL relativeVelocityMatrix TO GetMatrix().
-		SET relativeVelocityMatrix["MatrixSelf"] TO LIST(
+		LOCAL relativeVelocityMatrix TO LIST().
+		SET relativeVelocityMatrix TO LIST(
 														LIST(LVLHrelativeVelocity:X),
 														LIST(LVLHrelativeVelocity:Y),
 														LIST(LVLHrelativeVelocity:Z)
@@ -532,18 +286,27 @@ declare function CWequationCurrentVelFromFuturePos {
 	DECLARE PARAMETER initialTime.
 	DECLARE PARAMETER finalTime.
 
+	LOCAL debugVectorDraw to FALSE.
+
 	//Compute craft's positions and velocities
 	LOCAL chaserOrbit TO UpdateOrbitParams(chaserShip:ORBIT).
 	LOCAL targetOrbit TO UpdateOrbitParams(targetShip:ORBIT).
 
-	LOCAL chaserPosition TO RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
-	LOCAL chaserVelocity TO VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL chaserPosition TO 0.
+	LOCAL chaserVelocity TO 0.
+	LOCAL targetPosition TO 0.
+	LOCAL targetVelocity TO 0.
+	LOCAL targetPositionFinal TO 0.
+	LOCAL targetVelocityFinal TO 0.
 
-	LOCAL targetPosition TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
-	LOCAL targetVelocity TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL bodyPos to chaserShip:BODY:POSITION.
 
-	LOCAL targetPositionFinal TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, finalTime)).
-	LOCAL targetVelocityFinal TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, finalTime)).
+	SET chaserPosition TO chaserShip:ORBIT:POSITION - bodyPos.
+	SET chaserVelocity TO chaserShip:VELOCITY:ORBIT.
+
+	SET targetPosition TO targetShip:ORBIT:POSITION - bodyPos.
+	SET targetVelocity TO targetShip:VELOCITY:ORBIT.
+	//}
 
 	LOCAL n IS SQRT(Globals["mu"] / (TargetOrbit["a"] * TargetOrbit["a"] * TargetOrbit["a"])).
 
@@ -558,15 +321,15 @@ declare function CWequationCurrentVelFromFuturePos {
 	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*LVLH:basis:z, relativePosition).
 	LOCAL LVLHrelativeVelocity IS VCMT(LVLH:Transform, relativeVelocity).
 
-	LOCAL relativePositionMatrix IS GetMatrix().
-	SET relativePositionMatrix["MatrixSelf"] TO LIST(
+	LOCAL relativePositionMatrix IS LIST().
+	SET relativePositionMatrix TO LIST(
 													LIST(LVLHrelativePosition:X),
 													LIST(LVLHrelativePosition:Y),
 													LIST(LVLHrelativePosition:Z)
 												).
 
-	LOCAL relativePositionFinalMatrix IS GetMatrix().
-	SET relativePositionFinalMatrix["MatrixSelf"] TO LIST(
+	LOCAL relativePositionFinalMatrix IS LIST().
+	SET relativePositionFinalMatrix TO LIST(
 													LIST(LVLHrelativePositionFinal:X),
 													LIST(LVLHrelativePositionFinal:Y),
 													LIST(LVLHrelativePositionFinal:Z)
@@ -576,6 +339,18 @@ declare function CWequationCurrentVelFromFuturePos {
 	LOCAL targetRelativeVelocity TO VCMT(LVLH:Inverse, targetLVLHrelativeVelocity).
 
 	LOCAL targetChaserVelocity IS targetRelativeVelocity + targetVelocity + VCRS(n*LVLH:basis:z, relativePosition).
+
+	IF(debugVectorDraw = true) {
+		CLEARVECDRAWS().
+		vecdraw(V(0,0,0), LVLH:basis:X*10, rgb(1, 0, 0), "X", 1.0, true, 0.2, true, true).
+		vecdraw(V(0,0,0), LVLH:basis:Y*10, rgb(0, 1, 0), "Y", 1.0, true, 0.2, true, true).
+		vecdraw(V(0,0,0), LVLH:basis:Z*10, rgb(0, 0, 1), "Z", 1.0, true, 0.2, true, true).
+
+		local posVec to LVLH:basis:X*LVLHrelativePosition:X + LVLH:basis:Y*LVLHrelativePosition:Y + LVLH:basis:Z*LVLHrelativePosition:Z.
+		local velVec to LVLH:basis:X*LVLHrelativeVelocity:X + LVLH:basis:Y*LVLHrelativeVelocity:Y + LVLH:basis:Z*LVLHrelativeVelocity:Z.
+		vecdraw(V(0,0,0), -posVec, rgb(0, 1, 1), "pos", 1.0, true, 0.2, true, true).
+		vecdraw(V(0,0,0), velVec*10, rgb(1, 0, 1), "vel", 1.0, true, 0.2, true, true).
+	}
 
 	RETURN LEXICON(
 		"LVLHrelativePosition", LVLHrelativePosition,
@@ -598,19 +373,19 @@ declare function _CWfindRatT_ {
 	LOCAL _n IS n * 180/CONSTANT:PI.
 
 
-	local Mtrans is GetMatrix().	//---------------Mtransition Matrix
-	set Mtrans["MatrixSelf"] to list(list(4-3*cos(_n*t), 	   0, 0),
+	local Mtrans is LIST().	//---------------Mtransition Matrix
+	set Mtrans to list(list(4-3*cos(_n*t), 	   0, 0),
 									 list(6*(sin(_n*t) - n*t),  1, 0),
 									 list(0,                   0, cos(_n*t))
 									 ).
-	local Ntrans is GetMatrix().	//---------------Ntransition Matrix
-	set Ntrans["MatrixSelf"] to list(list((1/n)*sin(_n*t),          (2/n)*(1 - cos(_n*t)),     0),
+	local Ntrans is LIST().	//---------------Ntransition Matrix
+	set Ntrans to list(list((1/n)*sin(_n*t),          (2/n)*(1 - cos(_n*t)),     0),
 									 list((2/n)*(cos(_n*t) - 1), (1/n)*(4*sin(_n*t)-3*n*t), 0),
 									 list(0,                       0,                        (1/n)*sin(_n*t))
 									 ).
 	local MR is MatrixMultiply(Mtrans, currentR).
 	local NV is MatrixMultiply(Ntrans, currentV).
-	local futureR to MatrixAdd(MR, NV)["MatrixSelf"]. //Relative Velocity at T
+	local futureR to MatrixAdd(MR, NV). //Relative Velocity at T
 	return v(futureR[0][0], futureR[1][0], futureR[2][0]).
 }
 
@@ -623,13 +398,13 @@ declare function _CWfindVatT_ {
 	LOCAL _n IS n * 180/CONSTANT:PI.
 
 
-	local Mtrans is GetMatrix().	//---------------Mtransition Matrix
-	set Mtrans["MatrixSelf"] to list(list(4-3*cos(_n*t), 	   			0, 				0),
+	local Mtrans is LIST().	//---------------Mtransition Matrix
+	set Mtrans to list(list(4-3*cos(_n*t), 	   			0, 				0),
 									 list(6*(sin(_n*t) - n*t),  		1, 				0),
 									 list(0,                   			0, 		cos(_n*t))
 									 ).
-	local Ntrans is GetMatrix().	//---------------Ntransition Matrix
-	set Ntrans["MatrixSelf"] to list(
+	local Ntrans is LIST().	//---------------Ntransition Matrix
+	set Ntrans to list(
 									list((1/n)*sin(_n*t),				(2/n)*(1 - cos(_n*t)),								0),
 									list((2/n)*(cos(_n*t) - 1),			(1/n)*(4*sin(_n*t)-3*n*t),							0),
 									list(0,								0,										(1/n)*sin(_n*t))
@@ -638,13 +413,14 @@ declare function _CWfindVatT_ {
 	 LOCAL NtransInverse IS MatrixFindInverse(Ntrans).
 	 LOCAL MR IS MatrixMultiply(Mtrans, currentR).
 	 LOCAL idk IS MatrixSubtract(futureR, MR).
-	 LOCAL futureV IS MatrixMultiply(NtransInverse, idk)["MatrixSelf"].
+	 LOCAL futureV IS MatrixMultiply(NtransInverse, idk).
 	 RETURN v(futureV[0][0], futureV[1][0], futureV[2][0]).
 }
 
-declare function OrbitTransferDemo {
+declare function OrbitTransfer {
 	declare parameter DepartureOrbit.
 	declare parameter TargetOrbit.
+	declare parameter maxIterations to 1000.
 	local TargetOrbitCopyOne to TargetOrbit:copy.
 	local TargetOrbitCopyTwo to TargetOrbit:copy.
 	local TargetOrbitCopyThree to TargetOrbit:copy.
@@ -659,7 +435,7 @@ declare function OrbitTransferDemo {
 	if(aphiOne = 0) {
 		local converged to 0.
 		local iterations to 0.
-		until (converged <> 0 or iterations >= 30) {
+		until (converged <> 0 or iterations >= maxIterations) {
 			set TargetOrbitCopyOne["Pe"] to TargetOrbit["Pe"] - 10.
 			set TargetOrbitCopyOne to BuildOrbit(TargetOrbitCopyOne).
 			set aphiOne to FindOrbitIntersection(DepartureOrbit, TargetOrbitCopyOne).
@@ -698,7 +474,7 @@ declare function OrbitTransferDemo {
 			}
 			set iterations to iterations + 1.
 		}
-		if(iterations >= 30) {
+		if(iterations >= maxIterations) {
 			return lexicon("result", 0).
 		}
 	}
@@ -766,92 +542,6 @@ declare function nodeFromV {
 
 	local mnode to NODE(time:seconds, radV, normV, progV).
 	return lexicon("node", mnode, "dV", dV:mag, "dVvec", dV).
-}
-
-declare function OrbitTransfer {
-
-	declare parameter DepartureOrbit.
-	declare parameter TargetOrbit.
-	set dif to 0.
-
-	set relang to -1*(DepartureOrbit["Inc"] - TargetOrbit["Inc"]).
-
-	if (true) {
-		set aphi to FindOrbitIntersection(DepartureOrbit, TargetOrbit).
-		until (aphi <> 0) {
-			set TargetOrbit["Pe"] to TargetOrbit["Pe"] - 100.
-			set TargetOrbit["Ap"] to TargetOrbit["Ap"] + 100.
-			set aphi to FindOrbitIntersection(DepartureOrbit, TargetOrbit).
-		}
-		set phi to aphi[0].
-		set phi2 to aphi[2].
-		set r to RatAngle_old(DepartureOrbit, phi).
-
-		set depv to VatR(DepartureOrbit, r).
-		set depF to arccos(DepartureOrbit["h"]/(r*depv)).
-		if (phi > 180)
-			set depF to depF*-1.
-		set tgtv to VatR(TargetOrbit, r).
-		set tgtF to arccos(TargetOrbit["h"]/(r*tgtv)).
-		if (phi2 > 180)
-			set tgtF to tgtF*-1.
-		if(depF/abs(depF) <> tgtF/abs(tgtF)) {
-			set dF to (abs(tgtF) + abs(depF)).
-			set dif to 1.
-		}
-		else
-			set dF to abs (tgtF - depF).
-		set dVv to sqrt(depv*depv + tgtv*tgtv - 2*depv*tgtv*cos(dF)).
-		set dVang to arccos((dVv*dVv + depv*depv - tgtv*tgtv)/(2*depv*dVv)).
-		set dVprog to -1*dVv*cos(dVang).
-		if (dif = 0) {
-			if (depF >= tgtF)
-				set dVrad to -1*dVv*sin(dVang).
-			else
-				set dVrad to dVv*sin(dVang).
-		}
-		else if (dif = 1) {
-			if (tgtF < 0)
-				set dVrad to -1*dVv*sin(dVang).
-			else
-				set dVrad to dVv*sin(dVang).
-		}
-
-		set meta to time:seconds + TtoR(DepartureOrbit, ship:orbit:trueanomaly, phi).
-
-		set dVnorm to 0.
-
-		if (relang <> 0) {
-			if (abs(phi - (360 - DepartureOrbit["AoP"])) < 5 or abs(phi - (360 - DepartureOrbit["AoP"])) > 355) {
-
-				set depvec to v(depv, 0, 0).
-				set dVvec to v(dVprog, 0, dVrad).
-				set tgtvec to (depvec+dVvec).
-				set dVnorm to tgtvec:mag*sin(relang).
-
-				set dVv to sqrt(depv*depv + tgtv*tgtv - 2*depv*tgtv*cos(dF)).
-				set dVang to arccos((dVv*dVv + depv*depv - tgtv*tgtv)/(2*depv*dVv)).
-				set dVprog to -1*dVv*cos(dVang)  - (tgtvec:mag - tgtvec:mag*cos(relang)).
-				if (dif = 0) {
-					if (depF >= tgtF)
-						set dVrad to -1*dVv*sin(dVang).
-					else
-						set dVrad to dVv*sin(dVang).
-				}
-				else if (dif = 1) {
-					if (tgtF < 0)
-						set dVrad to -1*dVv*sin(dVang).
-					else
-						set dVrad to dVv*sin(dVang).
-				}
-			}
-		}
-
-		set result to NODE(meta, dVrad, dVnorm, dVprog).
-		return result.
-	}
-	else
-		return 0.
 }
 
 declare function FindOrbitIntersection {

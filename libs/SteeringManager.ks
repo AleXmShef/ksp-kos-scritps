@@ -3,6 +3,7 @@
 declare global _Controls to 0.
 declare global mnvrnodevector is 0.
 declare global vessel is 0.
+declare global SteeringManager_AlreadyInUpdate to false.
 
 declare function Setup {
 	set _Controls to 0.
@@ -135,7 +136,9 @@ declare function SteeringManagerMaster {
 }
 
 declare function SteeringManager {
-	if (_Controls["IsEnabled"] = 1) {
+	if (_Controls["IsEnabled"] = 1 AND SteeringManager_AlreadyInUpdate = false) {
+		set SteeringManager_AlreadyInUpdate to true.
+		//DROPPRIORITY().
 		if(_Controls["Mode"] = "ManeuverNode") {
 			if(HASNODE) {
 				set _Controls["Vector"]["mVector"] to mnvrnodevector.
@@ -186,16 +189,17 @@ declare function SteeringManager {
 		}
 		//---------------------------------------------------------------------Print debug info
 		//print "Total error: " + (90 - _Controls["Pitch"]["AngError"]) at (0, 15).
-		if(_Controls["DebugFlag"]) {
-			clearscreen.
-			print "Total error: " + vang(_Controls["Vector"]["mVector"], ship:facing:forevector) at (0, 0).
-			print "Pitch angular error: " + (90 - _Controls["Pitch"]["AngError"]) at (0, 1).
-			print "Pitch angular velocity: " + _Controls["Pitch"]["AngVelocity"] at (0, 2).
-			print "Pitch desired angular velocity: " + desiredPitchAngVel at (0, 3).
-			print "Yaw angular error: " + (90 - _Controls["Yaw"]["AngError"]) at (0, 4).
-			print "Yaw angular velocity: " + _Controls["Yaw"]["AngVelocity"] at (0, 5).
-			print "Yaw desired angular velocity: " + desiredYawAngVel at (0, 6).
-			print "Roll angular velocity: " + _Controls["Roll"]["AngVelocity"] at (0, 7).
-		}
+		// if(_Controls["DebugFlag"]) {
+		// 	clearscreen.
+		// 	print "Total error: " + vang(_Controls["Vector"]["mVector"], ship:facing:forevector) at (0, 0).
+		// 	print "Pitch angular error: " + (90 - _Controls["Pitch"]["AngError"]) at (0, 1).
+		// 	print "Pitch angular velocity: " + _Controls["Pitch"]["AngVelocity"] at (0, 2).
+		// 	print "Pitch desired angular velocity: " + desiredPitchAngVel at (0, 3).
+		// 	print "Yaw angular error: " + (90 - _Controls["Yaw"]["AngError"]) at (0, 4).
+		// 	print "Yaw angular velocity: " + _Controls["Yaw"]["AngVelocity"] at (0, 5).
+		// 	print "Yaw desired angular velocity: " + desiredYawAngVel at (0, 6).
+		// 	print "Roll angular velocity: " + _Controls["Roll"]["AngVelocity"] at (0, 7).
+		// }
+		set SteeringManager_AlreadyInUpdate to false.
 	}
 }

@@ -1,147 +1,61 @@
 @lazyglobal off.
-LOCAL LoopFlag IS 0.
+DECLARE GLOBAL FuncList TO list().
+DECLARE GLOBAL LoopFlag TO 0.
 declare function LoopManager {
 	declare parameter action to -1.
 	declare parameter pointer to 0.
-	if (LoopFlag = 1) {
 
+	if (action = -1) {
+		LoopManagerUpdate().
 	}
-	else if (action = -1) {
-		lock LoopManagerVar to 0.
+	else {
+		wait until (LoopFlag = 0).
+		set LoopFlag to 1.
+		if (action = 0) {
+			FuncList:Add(pointer).
+		}
+		else if (action = 1) {
+			local tList to FuncList:copy.
+			local i is 0.
+			for f in tList {
+				if (pointer = f) {
+					tList:Remove(i).
+					break.
+				}
+				set i to i+1.
+			}
+			set FuncList to tList.
+		}
+		set LoopFlag to 0.
+	}
+}
+
+declare function LoopManagerUpdate {
+	if (LoopFlag = 0) {
+		set LoopFlag to 1.
 		for f in FuncList:copy {
 			f:call().
 		}
-		lock LoopManagerVar to LoopManager().
-	}
-	else if (action = 0) {
-		set LoopFlag to 1.
-		FuncList:Add(pointer).
 		set LoopFlag to 0.
-	}
-	else if (action = 1) {
-		local tList to FuncList:copy.
-		local i is 0.
-		for f in tList {
-			if (pointer = f) {
-				tList:Remove(i).
-				break.
-			}
-			set i to i+1.
-		}
-		set FuncList to tList.
 	}
 }
 
 declare function EngineController {
 	declare parameter engine.
-	declare parameter action to 0.
+	declare parameter action to -1.
 	if (action = 0) {
 		engine:DOEVENT("shutdown engine").
 	}
 	else if (action = 1) {
 		engine:DOEVENT("activate engine").
 	}
-}
-
-declare function ExecBurn {
-	declare parameter burn.
-	declare parameter engine.
-	declare parameter warpFlag to 1.
-	declare parameter precisionMode to 0.
-	declare parameter rcsOnly to 0.
-	declare parameter ullage to 0.
-
-	LOCAL mnvrnode IS burn["node"].
-
-	ADD mnvrnode.
-
-	SteeringManagerSetMode("ManeuverNode").
-
-	if(rcsOnly = 0)
-		local burnTime to CalcBurnTime(mnvrnode:deltav:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
-	else
-		local burnTime to CalcBurnTime(mnvrnode:deltav:mag, Specs["UllageRcsThrust"], Specs["UllageRcsIsp"]).
-
-
-	if (burnTime < 40)
-		set warpFlag to 0.
-
-	wait until (vang(ship:facing:forevector, mnvrnode:deltav) < 2).
-
-	wait 3.
-
-	local warpToTime to time:seconds + mnvrnode:eta - (burnTime/2) - 25.
-
-	SteeringManagerMaster(0).
-
-	kuniverse:TimeWarp:WARPTO(warpToTime).
-
-	wait until (time:seconds > warpToTime + 6).
-
-	SteeringManagerMaster(1).
-
-	wait 10.
-
-	wait 7.
-
-	set Thrust to 1.
-
-	local prevConf to config:ipu.
-
-	if(ullage = 1)
-		rcs off.
-
-	wait 4.
-
-	EngineController(engine, 1).
-
-	rcs off.
-
-	wait until (engine:GETFIELD("Thrust") > Specs["EngineThrust"] * 0.7).
-
-	wait 1.
-
-	if (warpFlag = 1) {
-		set kuniverse:timewarp:mode to "PHYSICS".
-		set kuniverse:timewarp:warp to 3.
-	}
-
-	wait burnTime - 10.
-
-	set kuniverse:timewarp:mode to "PHYSICS".
-	set kuniverse:timewarp:warp to 0.
-
-	if (precisionMode = 1) {
-		local dV to mnvrnode:deltav:mag + 100.
-		local converged IS FALSE.
-		clearscreen.
-		set config:ipu to 2000.
-		until(converged = TRUE) {
-			local _mag is mnvrnode:deltav:mag.
-			if(_mag > dV) {
-				set converged to true.
-			}
-			else {
-				set dV to _mag.
-			}
-			wait 0.
-		}
-	}
 	else {
-		local _dV is mnvrnode:deltav:mag.
-		local _time is calcBurnTime(_dV, Specs["EngineThrust"], Specs["EngineIsp"]).
-		wait _time - 0.2.
+		local status to engine:GETFIELD("Propellant").
+		if(status:CONTAINS("VERY STABLE"))
+			return true.
+		else
+			return false.
 	}
-	set Thrust to 0.
-
-	EngineController(engine, 0).
-
-	remove mnvrnode.
-
-	rcs on.
-
-	set Controls["Mode"] to "Attitude".
-	wait 3.
 }
 
 declare function BurnUI {
@@ -314,8 +228,9 @@ declare function ExecBurnNew {
 	set BurnTelemetry["CutoffTime"] to burnTime.
 	set BurnTelemetry["dVgo"] to Vgo:MAG.
 	set BurnTelemetry["Status"] to "Attitude".
-	BurnUI(1).
-	LoopManager(0, BurnUI@).
+
+	//BurnUI(1).
+	//LoopManager(0, BurnUI@).
 
 	//Attitude aqq
 	SteeringManagerSetMode("Vector", Vgo).
@@ -330,7 +245,7 @@ declare function ExecBurnNew {
 	//Ullage
 	set BurnTelemetry["Status"] to "Ullage".
 	set Thrust to 1.
-	wait ullageDuration.
+	wait until (EngineController(Systems["Engine"]) = true).
 	EngineController(Systems["Engine"], 1).
 	rcs off.
 
@@ -355,12 +270,17 @@ declare function ExecBurnNew {
 		set Vgo to Vgo - ship:facing:forevector:normalized * ((Specs["EngineThrust"]/SHIP:MASS) * (curTime - prevTime)).
 
 		//Try to recalculate Vgo
-		declare local curOrbit to OrbitClass:copy.
-		set curOrbit to UpdateOrbitParams(curOrbit).
-		declare local _burn to OrbitTransferDemo(curOrbit, tgtOrbit).
+		local curOrbit to UpdateOrbitParams().
+		declare local _burn to OrbitTransfer(curOrbit, tgtOrbit, 10).
 		if(_burn["result"] = 1) {
-			set Vgo to _burn["dV"].
-			set BurnTelemetry["Message"] to "Updated Vgo".
+			local VgoNew to _burn["dV"].
+			if(VANG(VgoNew, Vgo) < 1 and ABS(VgoNew:MAG - Vgo:MAG) < 1) {
+				set Vgo to VgoNew.
+				set BurnTelemetry["Message"] to "Updated Vgo".
+			}
+			else {
+				set BurnTelemetry["Message"] to "Vgo divergence, using old".
+			}
 		}
 		else {
 			set BurnTelemetry["Message"] to "Old Vgo".
@@ -380,14 +300,14 @@ declare function ExecBurnNew {
 			set warpFlag to false.
 		}
 
-		if(Vgo:mag < 1) {
+		if(Vgo:mag < 3) {
 			wait Tgo.
 			set Thrust to 0.
 			EngineController(Systems["Engine"], 0).
 
 			set cutoff to true.
 			set BurnTelemetry["Status"] to "Cutoff".
-			set curOrbit to UpdateOrbitParams(curOrbit).
+			set curOrbit to UpdateOrbitParams().
 			set BurnTelemetry["CurrentOrbit"] to curOrbit.
 		}
 	}
@@ -395,7 +315,136 @@ declare function ExecBurnNew {
 	rcs on.
 	SteeringManagerSetMode("Attitude").
 	wait 5.
-	LoopManager(1, BurnUI@).
-	BurnUI(2).
+	//LoopManager(1, BurnUI@).
+	//BurnUI(2).
 	wait 1.
+}
+
+declare function RendezvousManager {
+	declare parameter ops.
+
+	declare function correct {
+		declare parameter chaserShip, targetShip, targetPosition, arrivalTime.
+		declare parameter cont to false.
+		local warpEnabled to false.
+		local corrected to false.
+		until (corrected = true) {
+			if(cont = true and warpEnabled = false) {
+				set kuniverse:timewarp:mode to "PHYSICS".
+				set kuniverse:timewarp:warp to 3.
+				set warpEnabled to true.
+			}
+
+			local requiredChange to CWequationCurrentVelFromFuturePos(chaserShip, targetShip, targetPosition, 0, arrivalTime - TIME:SECONDS).
+
+			local shipBasis to LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
+			local shipBasis to getTransform(shipBasis).
+			local dV to VCMT(shipBasis:Transform, requiredChange:targetChaserVelocity - requiredChange:chaserVelocity).
+
+			clearscreen.
+			print "Correcting" at (0, 0).
+			print "Current LVLH velocity:" at (0, 1).
+			print "Vel x: " + requiredChange:LVLHrelativeVelocity:X at (0,2).
+			print "Vel y: " + requiredChange:LVLHrelativeVelocity:Y at (0,3).
+			print "Vel z: " + requiredChange:LVLHrelativeVelocity:Z at (0,4).
+
+			print "Target LVLH velocity:" at (0, 6).
+			print "Vel x: " + requiredChange:targetLVLHrelativeVelocity:X at (0,7).
+			print "Vel y: " + requiredChange:targetLVLHrelativeVelocity:Y at (0,8).
+			print "Vel z: " + requiredChange:targetLVLHrelativeVelocity:Z at (0,9).
+
+			print "Current LVLH position:" at (0, 11).
+			print "Pos x: " + requiredChange:LVLHrelativePosition:X at (0,12).
+			print "Pos y: " + requiredChange:LVLHrelativePosition:Y at (0,13).
+			print "Pos z: " + requiredChange:LVLHrelativePosition:Z at (0,14).
+
+			print "Target LVLH position:" at (0, 16).
+			print "Pos x: " + targetPosition:X at (0,17).
+			print "Pos y: " + targetPosition:Y at (0,18).
+			print "Pos z: " + targetPosition:Z at (0,19).
+
+			print "dV mag: " + dV:MAG at (0, 21).
+			print "time to WP: " + (arrivalTime - TIME:SECONDS) at (0, 22).
+
+			if(TIME:SECONDS + requiredChange:LVLHrelativeVelocity:MAG/0.1 > arrivalTime) {
+				set SHIP:CONTROL:NEUTRALIZE to true.
+				set corrected to true.
+				set kuniverse:timewarp:mode to "PHYSICS".
+				set kuniverse:timewarp:warp to 0.
+			}
+			if(dV:MAG < 0.05) {
+				set SHIP:CONTROL:NEUTRALIZE to true.
+				if(cont = false)
+					set corrected to true.
+			}
+			else {
+				set SHIP:CONTROL:TRANSLATION to dV*5.
+			}
+			wait 0.5.
+		}
+	}
+
+	declare function killRelVel {
+		declare parameter chaserShip, targetShip.
+
+		local corrected to false.
+		until (corrected = true) {
+
+			local shipBasis to LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
+			local shipBasis to getTransform(shipBasis).
+
+			local dV to VCMT(shipBasis:Transform, targetShip:VELOCITY:ORBIT - chaserShip:VELOCITY:ORBIT).
+			if(dV:MAG < 0.05) {
+				set SHIP:CONTROL:NEUTRALIZE to true.
+				set corrected to true.
+			}
+			else {
+				set SHIP:CONTROL:TRANSLATION to dV*5.
+			}
+			wait 0.1.
+		}
+	}
+
+	declare local chaserShip to ops:chaserShip.
+	declare local targetShip to ops:targetShip.
+
+	declare local legs to ops:legs.
+
+	until (legs:length = 0) {
+		local leg to legs:POP().
+
+		local currentState to CWequationFutureFromCurrent(chaserShip, targetShip, 0, 0).
+
+		local targetPosition to leg:targetPosition.
+		local cont to leg:cont.
+		local arrivalTime to 0.
+		local legTime to 0.
+		local legVelocity to 0.
+
+		if(leg:HASKEY("arrivalTime")) {
+			set arrivalTime to leg:arrivalTime.
+			set legTime to (arrivalTime - TIME:SECONDS)/2.
+			set legVelocity to (targetPosition - currentState:LVLHrelativePosition):MAG/legTime.
+		}
+		else {
+			set legVelocity to leg:legVelocity.
+			set legTime to (targetPosition - currentState:LVLHrelativePosition):MAG/legVelocity + 20.
+			set arrivalTime to legTime + TIME:SECONDS.
+		}
+
+		correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
+
+		if(cont = false) {
+			kuniverse:timewarp:warpto(arrivalTime - legTime/2).
+			wait until (time:seconds - 2 > arrivalTime - legTime/2).
+
+			correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
+
+			kuniverse:timewarp:warpto(arrivalTime - legVelocity/0.1).
+			wait until (time:seconds - 2 > arrivalTime - legVelocity/0.1).
+		}
+		if(leg:HASKEY("killRelVel") and leg:killRelVel = true) {
+			killRelVel(chaserShip, targetShip).
+		}
+	}
 }
