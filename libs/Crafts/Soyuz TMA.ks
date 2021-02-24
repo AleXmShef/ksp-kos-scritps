@@ -1,10 +1,35 @@
 @lazyglobal off.
 clearscreen.
+SET config:IPU to 2000.
 //-------------------------------------Import Libraries----------------------------------------
-Import(list("orbits", "propulsion", "maneuvers", "SteeringManager")).
+Import(list("orbits", "propulsion", "maneuvers", "SteeringManager", "miscellaneous")).
+
+DECLARE GLOBAL Components to lexicon().
+
+DECLARE FUNCTION PopulateParts {
+	set Components["SM"] to CORE:PART.
+	set Components["SM_Separator"] to GetConnectedParts(Components["SM"], "SOYUZ.SEPARATOR").
+	set Components["dockingAntenna"] to GetConnectedParts(Components["SM"], "SOYUZ.DockingAntenna").
+	set Components["heatShield"] to GetConnectedParts(Components["SM_Separator"], "SOYUZ.HEAT.SHIELD").
+	set Components["DM"] to GetConnectedParts(Components["heatShield"], "SOYUZ.REENTRY.CAPSULE").
+	set Components["mainChute"] to GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE").
+	set Components["spareChute"] to GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE.SPARE").
+	set Components["perescope"] to GetConnectedParts(Components["DM"], "SOYUZ.PERESCOPE").
+	set Components["OM"] to GetConnectedParts(Components["DM"], "SOYUZ.orbitalSegment").
+	set Components["dockingPort"] to GetConnectedParts(Components["OM"], "SOYUZdockingPort").
+	set Components["solarPanels"] to GetConnectedParts(SM, "SOYUZ.SOLAR.Panel").
+}
+
+PopulateParts().
 
 DECLARE GLOBAL Systems to lexicon(
-						"Engine", ship:partstitled("Soyuz TM/TMA/MS Service Module")[0]:GETMODULE("ModuleEnginesRF")
+						"Engine", Components:SM:GETMODULE("ModuleEnginesRF"),
+						"MainAntenna", Components:dockingAntenna:GETMODULE("ModuleRTAntenna"),
+						"SM_Separator", Components:SM_Separator:GETMODULE("ModuleDecouple"),
+						"OM_Separator", Components:OM:GETMODULE("ModuleDecouple"),
+						"DockingAntenna", Components:OM:GETMODULE("ModuleRTAntenna"),
+						"SolarPanels", Components:solarPanels:GETMODULE("ModuleDeployableSolarPanel"),
+						"DockingPort", Components:dockingPort:GETMODULE("ModuleDockingNode")
 ).
 
 DECLARE GLOBAL Specs to lexicon(
@@ -19,86 +44,61 @@ DECLARE GLOBAL Thrust TO 0.
 DECLARE GLOBAL ArrivalTime TO 0.
 DECLARE GLOBAL testFlag TO 0.
 
-// declare function InitMode {
-// 	local mode to "Ascent".
-//
-// 	if exists("1:/last_mode.json") {
-// 		set mode to READJSON("1:/last_mode.json"):mode.
-// 	}
-// 	if(mode <> "Ascent")
-// 		InitControls().
-// 	ModeController(mode, false).
-// }
-
-// declare function ModeController {
-// 	declare parameter TargetMode.
-// 	declare parameter _reboot to true.
-//
-// 	if(_reboot = true) {
-// 		local last_mode to LEXICON("mode", TargetMode).
-// 		WRITEJSON(last_mode, "1:/last_mode.json").
-// 		reboot.
-// 	}
-// 	else
-// 		set CurrentMode to TargetMode.
-// }
-
-// declare function InitControls {
-// 	set config:ipu to 2000.
-// 	SteeringManagerMaster(1).
-// 	SteeringManagerSetVector().
-// 	LoopManager(0, SteeringManager@).
-// 	LOCK THROTTLE TO Thrust + LoopManager().
-// }
-
-//InitMode().
+DECLARE GLOBAL Modes TO LEXICON(
+	"98", "Nothing",
+	"99", "Bebug",
+	"100", "Boot",
+	"101", "Ascent",
+	"102", "Insertion",
+	"202", "OnOrbit",
+	"203", "Docking",
+	"204", "Docked",
+	"301", "Deorbit",
+	"302", "Abort",
+	"400", "Shutdown",
+	"401", "Reboot"
+)
 
 declare function ModeController {
 	declare parameter TargetMode.
-	set CurrentMode TO TargetMode.
+	if(TargetMode = "400")
+		shutdown.
+	else if(TargetMode = "401")
+		reboot.
+	else if(Modes:HASKEY(TargetMode)) {
+		set CurrentMode TO TargetMode.
+		local lmj to LEXICON("Mode", TargetMode).
+		WRITEJSON(lmj, "1:/LastMode.json").
+	}
 }
 
-// declare function SteeringManagerSetMode {
-// 	declare parameter mode.
-// 	declare parameter arg to "None".
-//
-// 	local p to PROCESSOR("SteeringManagerProcessor").
-// 	p:CONNECTION:SENDMESSAGE(LEXICON("Mode", mode, "Arg", arg)).
-// }
-//
-// declare function SteeringManagerMaster {
-// 	declare parameter enable.
-//
-// 	local p to PROCESSOR("SteeringManagerProcessor").
-// 	if(enable = 1)
-// 		p:CONNECTION:SENDMESSAGE("Enable").
-// 	ELSE
-// 		p:CONNECTION:SENDMESSAGE("Disable").
-//}
+if(exists("1:/LastMode.json")) {
+	local last_mode_json to READJSON("1:/LastMode.json").
+	ModeController(last_mode_json:Mode).
+}
+else
+	ModeController("100").
 
-ModeController("Ascent").
-
-UNTIL (CurrentMode = "Shutdown") {
-	IF (CurrentMode = "debug") {
+UNTIL (CurrentMode = "400") {
+	IF (CurrentMode = "99") {
 
 
 		wait 1000.
 		ModeController("Shutdown").
 	}
-	ELSE IF (CurrentMode = "Nothing") {
+	ELSE IF (CurrentMode = "98") {
 		WAIT UNTIL CurrentMode <> "Nothing".
 	}
-	ELSE IF (CurrentMode = "Ascent") {
-		WAIT UNTIL (not CORE:MESSAGES:EMPTY).
+	ELSE IF (CurrentMode = "101") {
+		WAIT UNTIL (not CORE:MESSAGES:EMPTY or CurrentMode <> "101").
 		IF (not CORE:MESSAGES:EMPTY) {
 			LOCAL Recieved TO CORE:MESSAGES:POP.
 			IF Recieved:content = "Successful ascent" {
-				ModeController("ParkingOrbit").
+				ModeController("102").
 			}
 		}
 	}
 	ELSE IF (CurrentMode = "ParkingOrbit") {
-		SET config:IPU to 2000.
 		SteeringManagerMaster(1).
 		SteeringManagerSetMode("Attitude").
 		LoopManager(0, SteeringManager@).
@@ -117,7 +117,7 @@ UNTIL (CurrentMode = "Shutdown") {
 		WAIT 1.
 		ModeController("Insertion").
 	}
-	ELSE IF (CurrentMode = "Insertion") {
+	ELSE IF (CurrentMode = "102") {
 		LOCAL CurrentOrbit TO UpdateOrbitParams().
 
 		LOCAL TargetOrbit IS OrbitClass:copy.
@@ -136,6 +136,9 @@ UNTIL (CurrentMode = "Shutdown") {
 		WAIT 5.
 
 		ModeController("CoellipticPhase").
+	}
+	ELSE IF (CurrentMode = "202") {
+
 	}
 	ELSE IF (CurrentMode = "CoellipticPhase") {
 		SET TARGET TO "Soyuz Docking Target".

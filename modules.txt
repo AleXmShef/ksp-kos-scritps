@@ -1,0 +1,141 @@
+SOYUZ.ENGINE :
+LIST of 14 items:
+[0] = "ModuleEnginesRF"
+[1] = "ModuleRCSFX"
+[2] = "ModuleRCSFX"
+[3] = "FXModuleAnimateThrottle"
+[4] = "EngineGroupModule"
+[5] = "GeometryPartModule"
+[6] = "FARAeroPartModule"
+[7] = "FARPartModule"
+[8] = "KOSNameTag"
+[9] = "kOSProcessor"
+[10] = "ModuleGimbal"
+[11] = "ModuleEngineConfigs"
+[12] = "ModuleFuelTanks"
+[13] = "ModuleActiveRadiator"
+ 
+SOYUZ.SEPARATOR :
+LIST of 7 items:
+[0] = "ModuleDecouple"
+[1] = "GeometryPartModule"
+[2] = "FARAeroPartModule"
+[3] = "FARPartModule"
+[4] = "KOSNameTag"
+[5] = "ModuleToggleCrossfeed"
+[6] = "KJRDecouplerReinforcementModule"
+ 
+SOYUZ.DockingAntenna :
+LIST of 7 items:
+[0] = "ModuleDeployableAntenna"
+[1] = "GeometryPartModule"
+[2] = "FARAeroPartModule"
+[3] = "FARPartModule"
+[4] = "KOSNameTag"
+[5] = "ModuleSPUPassive"
+[6] = "ModuleRTAntenna"
+ 
+SOYUZ.HEAT.SHIELD :
+LIST of 8 items:
+[0] = "ModuleDecouple"
+[1] = "ModuleAblator"
+[2] = "GeometryPartModule"
+[3] = "FARAeroPartModule"
+[4] = "FARPartModule"
+[5] = "KOSNameTag"
+[6] = "ModuleToggleCrossfeed"
+[7] = "KJRDecouplerReinforcementModule"
+ 
+SOYUZ.REENTRY.CAPSULE :
+LIST of 25 items:
+[0] = "ModuleCommand"
+[1] = "ModuleScienceExperiment"
+[2] = "ModuleScienceContainer"
+[3] = "ModuleEnginesRF"
+[4] = "ModuleSurfaceFX"
+[5] = "ModuleRCSFX"
+[6] = "ModuleJettison"
+[7] = "kOSProcessor"
+[8] = "GeometryPartModule"
+[9] = "FARAeroPartModule"
+[10] = "FARPartModule"
+[11] = "KOSNameTag"
+[12] = "ModuleEngineConfigs"
+[13] = "AdjustableCoMShifter"
+[14] = "ModuleFuelTanks"
+[15] = "ModuleFuelTanks"
+[16] = "ModuleSPU"
+[17] = "ModuleRTAntenna"
+[18] = "MechJebCore"
+[19] = "FlightEngineerModule"
+[20] = "ModuleTripLogger"
+[21] = "ModuleKISInventory"
+[22] = "ModuleKISInventory"
+[23] = "ModuleKISInventory"
+[24] = "ModuleRTDataTransmitter"
+ 
+SOYUZ.PARASHUTE :
+LIST of 8 items:
+[0] = "ModuleTestSubject"
+[1] = "ModuleDragModifier"
+[2] = "ModuleDragModifier"
+[3] = "GeometryPartModule"
+[4] = "FARAeroPartModule"
+[5] = "FARPartModule"
+[6] = "KOSNameTag"
+[7] = "RealChuteModule"
+ 
+SOYUZ.PARASHUTE.SPARE :
+LIST of 8 items:
+[0] = "ModuleTestSubject"
+[1] = "ModuleDragModifier"
+[2] = "ModuleDragModifier"
+[3] = "GeometryPartModule"
+[4] = "FARAeroPartModule"
+[5] = "FARPartModule"
+[6] = "KOSNameTag"
+[7] = "RealChuteModule"
+ 
+SOYUZ.PERESCOPE :
+LIST of 7 items:
+[0] = "ModuleDecouple"
+[1] = "GeometryPartModule"
+[2] = "FARAeroPartModule"
+[3] = "FARPartModule"
+[4] = "KOSNameTag"
+[5] = "ModuleToggleCrossfeed"
+[6] = "KJRDecouplerReinforcementModule"
+ 
+SOYUZ.orbitalSegment :
+LIST of 10 items:
+[0] = "ModuleDecouple"
+[1] = "ModuleAnimateGeneric"
+[2] = "ModuleLight"
+[3] = "kOSProcessor"
+[4] = "GeometryPartModule"
+[5] = "FARAeroPartModule"
+[6] = "FARPartModule"
+[7] = "KOSNameTag"
+[8] = "ModuleToggleCrossfeed"
+[9] = "KJRDecouplerReinforcementModule"
+ 
+SOYUZdockingPort :
+LIST of 7 items:
+[0] = "ModuleDockingNode"
+[1] = "ModuleAnimateGeneric"
+[2] = "ModuleAnimateGeneric"
+[3] = "GeometryPartModule"
+[4] = "FARAeroPartModule"
+[5] = "FARPartModule"
+[6] = "KOSNameTag"
+ 
+SOYUZ.SOLAR.PANEL :
+LIST of 7 items:
+[0] = "ModuleDeployableSolarPanel"
+[1] = "GeometryPartModule"
+[2] = "FARAeroPartModule"
+[3] = "FARPartModule"
+[4] = "KOSNameTag"
+[5] = "ModuleROSolarPanel"
+[6] = "KopernicusSolarPanels"
+ 

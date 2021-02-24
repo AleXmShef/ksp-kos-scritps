@@ -59,10 +59,18 @@ GLOBAL controls IS LEXICON(
 SWITCH TO 0.
 CLEARSCREEN.
 SET STEERINGMANAGER:ROLLTS TO 10.
-run "0:/libs/UPFG/pegas.ks".
+print "Continue booting sequence? (y/n):".
+wait until TERMINAL:INPUT:HASCHAR.
+if(TERMINAL:INPUT:GETCHAR() = "y") {
 
-local msg is "Successful ascent".
-if(SoyuzMission:HASKEY("PayloadProcessor"))
-	set p to PROCESSOR(SoyuzMission["PayloadProcessor"]).
+	run "0:/libs/UPFG/pegas.ks".
 
-p:CONNECTION:SENDMESSAGE(msg).
+	local msg is "Successful ascent".
+	if(SoyuzMission:HASKEY("PayloadProcessor"))
+		set p to PROCESSOR(SoyuzMission["PayloadProcessor"]).
+
+	p:CONNECTION:SENDMESSAGE(msg).
+}
+else {
+	shutdown.
+}

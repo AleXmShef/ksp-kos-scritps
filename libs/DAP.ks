@@ -1,131 +1,126 @@
 @lazyglobal off.
 Import(LIST("miscellaneous", "maneuvers")).
 
-declare global _Controls to 0.
-declare global mnvrnodevector is 0.
-declare global vessel is 0.
-declare global SteeringManager_AlreadyInUpdate to false.
-
-declare function Setup {
-	set _Controls to 0.
-	set _Controls to lexicon(
-						"IsEnabled", 0,
-						"Mode", "Attitude",
-						"VelocityControl", 0,
-						"ReferenceDirection", SHIP,
-						"ThrustOffset", LEXICON("pitch", 0, "yaw", 0),
-						"Vector", v(0,0,0),
-						"Direction", LOOKDIRUP(v(1, 0, 0), v(0, 1, 0)),
-						"Pitch", lexicon(
-									"AngError", 0,
-									"AngVelocity", 0,
-									"VelocityPID", PIDLOOP(),
-									"TorquePID", PIDLOOP()
-									),
-						"Yaw", lexicon(
-									"AngError", 0,
-									"AngVelocity", 0,
-									"VelocityPID", PIDLOOP(),
-									"TorquePID", PIDLOOP()
-									),
-						"Roll", lexicon(
-									"AngError", 0,
-									"AngVelocity", 0,
-									"VelocityPID", PIDLOOP(),
-									"TorquePID", PIDLOOP()
-									)
-	).
-	set _Controls["Pitch"]["TorquePID"]:Kp to 1.8.
-	set _Controls["Pitch"]["TorquePID"]:Ki to 0.
-	set _Controls["Pitch"]["TorquePID"]:Kd to 0.4.
-	set _Controls["Pitch"]["TorquePID"]:maxoutput to 1.
-	set _Controls["Pitch"]["TorquePID"]:minoutput to -1.
-	set _Controls["Yaw"]["TorquePID"]:Kp to 1.8.
-	set _Controls["Yaw"]["TorquePID"]:Ki to 0.
-	set _Controls["Yaw"]["TorquePID"]:Kd to 0.4.
-	set _Controls["Yaw"]["TorquePID"]:maxoutput to 1.
-	set _Controls["Yaw"]["TorquePID"]:minoutput to -1.
-	set _Controls["Roll"]["TorquePID"]:Kp to 1.1.
-	set _Controls["Roll"]["TorquePID"]:Ki to 0.
-	set _Controls["Roll"]["TorquePID"]:Kd to 0.8.
-	set _Controls["Roll"]["TorquePID"]:maxoutput to 1.
-	set _Controls["Roll"]["TorquePID"]:minoutput to -1.
-	set _Controls["Pitch"]["VelocityPID"]:Kp to 0.2.
-	set _Controls["Pitch"]["VelocityPID"]:Ki to 0.
-	set _Controls["Pitch"]["VelocityPID"]:Kd to 0.5.
-	set _Controls["Pitch"]["VelocityPID"]:maxoutput to 2.
-	set _Controls["Pitch"]["VelocityPID"]:minoutput to -2.
-	set _Controls["Yaw"]["VelocityPID"]:Kp to 0.2.
-	set _Controls["Yaw"]["VelocityPID"]:Ki to 0.
-	set _Controls["Yaw"]["VelocityPID"]:Kd to 0.5.
-	set _Controls["Yaw"]["VelocityPID"]:maxoutput to 2.
-	set _Controls["Yaw"]["VelocityPID"]:minoutput to -2.
-	set _Controls["Roll"]["VelocityPID"]:Kp to 0.2.
-	set _Controls["Roll"]["VelocityPID"]:Ki to 0.
-	set _Controls["Roll"]["VelocityPID"]:Kd to 0.5.
-	set _Controls["Roll"]["VelocityPID"]:maxoutput to 2.
-	set _Controls["Roll"]["VelocityPID"]:minoutput to -2.
+function GetDAP {
+	return LEXICON(
+		"Engaged", false,
+		"Mode", LEXICON(
+			"Mode", "Inertial",
+			"Target", ship:facing
+		),
+		"ReferenceAxis", "+X",
+		"VelocityControl", 0,
+		"ThrustOffset", LEXICON("pitch", 0, "yaw", 0),
+		"Internal", LEXICON(
+			"AlreadyInUpdate", false,
+			"ReferenceAxis", LEXICON(
+				"+X", LEXICON("x", v(1, 0, 0), "y", v(0, 1, 0), "z", v(0, 0, 1)),
+				"-X", LEXICON("x", v(-1, 0, 0), "y", v(0, -1, 0), "z", v(0, 0, -1)),
+				"+Y", LEXICON("x", v(0, 1, 0), "y", v(-1, 0, 0), "z", v(0, 0, 1)),
+				"-Y", LEXICON("x", v(0, -1, 0), "y", v(1, 0, 0), "z", v(0, 0, -1)),
+				"+Z", LEXICON("x", v(0, 0, 1), "y", v(0, 1, 0), "z", v(1, 0, 0)),
+				"-Z", LEXICON("x", v(0, 0, -1), "y", v(0, -1, 0), "z", v(-1, 0, 0)),
+			)
+		)
+		"Pitch", lexicon(
+					"AngError", 0,
+					"AngVelocity", 0,
+					"VelocityPID", PIDLOOP(),
+					"TorquePID", PIDLOOP()
+					),
+		"Yaw", lexicon(
+					"AngError", 0,
+					"AngVelocity", 0,
+					"VelocityPID", PIDLOOP(),
+					"TorquePID", PIDLOOP()
+					),
+		"Roll", lexicon(
+					"AngError", 0,
+					"AngVelocity", 0,
+					"VelocityPID", PIDLOOP(),
+					"TorquePID", PIDLOOP()
+					)
+	)
 }
 
-declare global currentFacingVec to ship:facing.
-declare global previousFacingVec to v(0, 0, 0).
-declare global previousTime to 0.
+function DAP_Engage {
+	set self:Engaged to true.
+}
 
-declare function SteeringManagerSetMode {
+function DAP_Disengage {
+	parameter self.
+	set self:Engaged to false.
+	set ship:control:neutralize to true.
+}
+
+declare function DAP_Setup {
+	parameter self.
+
+	set self["Pitch"]["TorquePID"]:Kp to 1.8.
+	set self["Pitch"]["TorquePID"]:Ki to 0.
+	set self["Pitch"]["TorquePID"]:Kd to 0.4.
+	set self["Pitch"]["TorquePID"]:maxoutput to 1.
+	set self["Pitch"]["TorquePID"]:minoutput to -1.
+	set self["Yaw"]["TorquePID"]:Kp to 1.8.
+	set self["Yaw"]["TorquePID"]:Ki to 0.
+	set self["Yaw"]["TorquePID"]:Kd to 0.4.
+	set self["Yaw"]["TorquePID"]:maxoutput to 1.
+	set self["Yaw"]["TorquePID"]:minoutput to -1.
+	set self["Roll"]["TorquePID"]:Kp to 1.1.
+	set self["Roll"]["TorquePID"]:Ki to 0.
+	set self["Roll"]["TorquePID"]:Kd to 0.8.
+	set self["Roll"]["TorquePID"]:maxoutput to 1.
+	set self["Roll"]["TorquePID"]:minoutput to -1.
+	set self["Pitch"]["VelocityPID"]:Kp to 0.2.
+	set self["Pitch"]["VelocityPID"]:Ki to 0.
+	set self["Pitch"]["VelocityPID"]:Kd to 0.5.
+	set self["Pitch"]["VelocityPID"]:maxoutput to 2.
+	set self["Pitch"]["VelocityPID"]:minoutput to -2.
+	set self["Yaw"]["VelocityPID"]:Kp to 0.2.
+	set self["Yaw"]["VelocityPID"]:Ki to 0.
+	set self["Yaw"]["VelocityPID"]:Kd to 0.5.
+	set self["Yaw"]["VelocityPID"]:maxoutput to 2.
+	set self["Yaw"]["VelocityPID"]:minoutput to -2.
+	set self["Roll"]["VelocityPID"]:Kp to 0.2.
+	set self["Roll"]["VelocityPID"]:Ki to 0.
+	set self["Roll"]["VelocityPID"]:Kd to 0.5.
+	set self["Roll"]["VelocityPID"]:maxoutput to 2.
+	set self["Roll"]["VelocityPID"]:minoutput to -2.
+}
+
+declare function DAP_SetMode {
+	declare parameter self.
 	declare parameter mode to "Attitude".
-	declare parameter vec to 0.
-	if(mode = "Vector") {
-		set _Controls["Vector"] to vec.
-		set _Controls["Mode"] to mode.
+	declare parameter arg to 0.
+	if(mode = "Inertial") {
+		set self["Mode"] to LEXICON(
+			"Mode", "Inertial"
+		).
 	}
-	else if(mode = "Direction") {
-		set _Controls:Direction to vec.
-		set _Controls:Mode to mode.
+	else if(mode = "LVLH") {
+		set self["Mode"] to LEXICON(
+			"Mode", "LVLH"
+		).
 	}
-	else if(mode = "Vessel") {
-		set _Controls["Mode"] to mode.
-		set vessel to vec.
+	else if(mode = "Track") {
+		set self["Mode"] to LEXICON(
+			"Mode", "Track",
+			"Target", arg:Target,
+			"Reference", arg:Reference
+		).
 	}
 	else
 		set _Controls["Mode"] to "Attitude".
 }
 
-declare function SteeringManagerSetThrustOffset {
+declare function DAP_SetThrustOffset {
 	declare parameter offset to LEXICON("pitch", 0, "yaw", 0).
 	set _Controls["ThrustOffset"] to offset.
 }
 
-declare function UpdateOld {
-	set currentFacingVec to _Controls["ReferenceDirection"]:facing.
-	local foreVec to currentFacingVec:forevector.
-	local starboardVec to currentFacingVec:starvector.
-	local topVec to currentFacingVec:topvector.
-	//------------------------------------------------------------------------------------------------------Delta Yaw Update
-	local yawAngErr to vang(starboardVec, (_Controls["Vector"]["mVector"] - topVec)).
-	if(vang((_Controls["Vector"]["mVector"] - topVec), foreVec) > 90)
-		set yawAngErr to yawAngErr*-1.
-	set yawAngErr to yawAngErr + _Controls:ThrustOffset:yaw.
-	set _Controls["Yaw"]["AngVelocity"] to VDOT(topVec, SHIP:ANGULARVEL)*180/CONSTANT:PI.
-	set _Controls["Yaw"]["AngError"]  to yawAngErr.
-	//------------------------------------------------------------------------------------------------------Delta Pitch Update
-	local pitchAngErr to vang(topVec, (_Controls["Vector"]["mVector"] - starboardVec)).
-	if(vang((_Controls["Vector"]["mVector"] - starboardVec), foreVec) > 90)
-		set pitchAngErr to pitchAngErr*-1.
-	set pitchAngErr to pitchAngErr + _Controls:ThrustOffset:pitch.
-	set _Controls["Pitch"]["AngVelocity"] to -VDOT(starboardVec, SHIP:ANGULARVEL)*180/CONSTANT:PI.
-	set _Controls["Pitch"]["AngError"]  to pitchAngErr.
-	//------------------------------------------------------------------------------------------------------Delta Roll Update
-	set _Controls["Roll"]["AngVelocity"] to VDOT(foreVec, SHIP:ANGULARVEL)*180/CONSTANT:PI.
-	//set _Controls["Roll"]["AngError"] to rollAngErr.
-}
-
 declare function Update {
-	set currentFacingVec to Ship:facing.
-	local foreVec to currentFacingVec:forevector.
-	local starboardVec to currentFacingVec:starvector.
-	local topVec to currentFacingVec:topvector.
-
-	local shipBasis to LEXICON("x", foreVec, "y", starboardVec, "z", topVec).
+	//EXPECTS DEFINED GLOBAL: DAP_GLOBAL
+	local shipBasis to DAP_GLOBAL:
 
 	local angErr to 0.
 	if(_Controls:Mode = "Vector")

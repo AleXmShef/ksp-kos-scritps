@@ -38,14 +38,17 @@ declare function UI_Manager_AddLayout {
 declare function UI_Manager_Update {
 	declare parameter self.
 
-	pc(SHIP:NAME, 1, 0).
+	if(DEFINED(ShipName))
+		pc(ShipName, 1, false, 0).
+	else
+		pc(SHIP:NAME, 1, false, 0).
 	local met TO ParseTime(MISSIONTIME).
-	pr(met:d, 16, 3, 0).
-	pr(met:h, 20, 3, 0).
-	pr(met:m, 24, 3, 0).
-	pr(met:s, 28, 3, 0).
+	pr(met:d, 15, 3, false, 0).
+	pr(met:h, 19, 3, false, 0).
+	pr(met:m, 23, 3, false, 0).
+	pr(met:s, 27, 3, false, 0).
 
-	pl(self:Command:str, 2, 24).
+	pl(self:Command:str, 2, 24, false, 0).
 
 	if(self:Data:ActiveLayout >= 0)
 		self:Layouts[self:Data:ActiveLayout]:Update(self:Layouts[self:Data:ActiveLayout]).
@@ -82,6 +85,14 @@ declare function UI_Manager_ExecCommand {
 			}
 		}
 	}
+	else if(self:Command:OP = "SPEC") {
+		local spec to self:Command:ARG:TONUMBER(-1).
+		UI_Manager_Change_ActiveLayout(spec).
+	}
+	else if(self:Command:OP = "OPS") {
+		local mode to self:Command:ARG.
+		ModeController(mode).
+	}
 }
 
 declare function UI_Manager_KeyboardCallback {
@@ -110,7 +121,7 @@ declare function UI_Manager_KeyboardCallback {
 			set self:Command:ARG to self:Command:ARG + button.
 			set self:Command:str to self:Command:str + button.
 		}
-		else if(self:Command:stage = 1 and button = "EXEC" or button = "PRO") {
+		else if(self:Command:stage = 1 and ((button = "EXEC" and self:Command:OP = "ITEM") or (button = "PRO" and (self:Command:OP = "SPEC" or self:Command:OP = "OPS")))) {
 			set self:Command:stage to 2.
 			set self:Command:CMD to button.
 			set self:Command:str to self:Command:str + " " + button.
@@ -149,7 +160,7 @@ declare function UI_Manager_BigUpdate {
 declare function UI_Manager_Start {
 	declare parameter self.
 	declare parameter enable_keyboard to true.
-	declare parameter separate_thread to false.
+	declare parameter separate_thread to true.
 	set TERMINAL:WIDTH to 60.
 	set TERMINAL:HEIGHT to 27.
 
@@ -176,8 +187,9 @@ declare function UI_Manager_Change_ActiveLayout {
 	declare parameter self.
 	declare parameter layoutIndex.
 
-	set self:Data:ActiveLayout to layoutIndex.
-	 UI_Manager_Refresh(self).
+	if(self:Layouts:LENGTH > layoutIndex)
+		set self:Data:ActiveLayout to layoutIndex.
+	UI_Manager_Refresh(self).
 }
 
 declare function UI_Manager_Refresh {
@@ -210,10 +222,10 @@ declare function UI_Manager_Refresh {
 
 declare function UI_Manager_Init {
 
-	print ".----------------------------------------------------------.".	//0
-	print "|                                                          |".	//1
+	print "/   /   .--------------------------------------------------.".	//0
+	print ".-------*                                                  |".	//1
 	print "|----------------------------------------------------------|".	//2
-	print "| MET:          d   h   m   s |                            |".	//3
+	print "| MET:         d   h   m   s || UTC:                :  :   |".	//3
 	print "|----------------------------------------------------------|".	//4
 
 	//    0123456789
