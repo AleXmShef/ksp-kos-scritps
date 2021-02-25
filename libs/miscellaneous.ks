@@ -12,7 +12,17 @@ declare function LoopManager {
 		wait until (LoopFlag = 0).
 		set LoopFlag to 1.
 		if (action = 0) {
-			FuncList:Add(pointer).
+			local alreadyExists to false.
+			local i is 0.
+			for f in FuncList {
+				if (pointer = f) {
+					set alreadyExists to true.
+					break.
+				}
+				set i to i+1.
+			}
+			if(not alreadyExists)
+				FuncList:Add(pointer).
 		}
 		else if (action = 1) {
 			local tList to FuncList:copy.
@@ -72,36 +82,4 @@ declare function GetConnectedParts {
         }
     }
     return parts.
-}
-
-declare function GetRotationBetweenBasisDirection {
-	declare parameter basis.
-	declare parameter dir.
-
-	local vec_fwd to dir:FOREVECTOR.
-	local vec_up to dir:UPVECTOR.
-
-	local yaw to vang(basis:y, (vec_fwd - basis:z)).
-	if(vang((vec_fwd - basis:z), basis:x) > 90)
-		set yaw to yaw*-1.
-
-
-	local pitch to vang(basis:z, (vec_fwd - basis:y)).
-	if(vang((vec_fwd - basis:y), basis:x) > 90)
-		set pitch to pitch*-1.
-
-	local roll to 0.
-
-	if(vang(vec_fwd, basis:x) < 45) {
-		set roll to -vang(basis:z, (vec_up - basis:x)).
-		if(vang((vec_up - basis:x), basis:y) > 90)
-			set roll to roll*-1.
-	}
-
-	set pitch to pitch - 90.
-	set yaw to yaw - 90.
-
-	return lexicon("pitch", pitch, "yaw", yaw, "roll", roll).
-
-
 }

@@ -1,111 +1,139 @@
-declare function UI_Manager_BurnLayout_Init {
-    declare parameter self.
+GLOBAL ComputedBurnStorage TO LEXICON(
+	"Tig", 0,
+	"Vgo", v(0, 0, 0)
+)
+
+FUNCTION UI_Manager_BurnLayout_Init {
+    parameter self.
 
     print "|                                                          |".	//0
 	print "|----------------------------------------------------------|".	//1
-	print "|                                                          |".	//2
-	print "|                                                          |".	//3
-	print "|                                                          |".	//4
-	print "|                                                          |".	//5
-	print "|                                                          |".	//6
-	print "|                                                          |".	//7
-	print "|                                                          |".	//8
-	print "|                                                          |".	//9
-	print "|                                                          |".	//10
-	print "|                                                          |".	//11
-	print "|                                                          |".	//12
-	print "|                                                          |".	//13
-	print "|                                                          |".	//14
-	print "|                                                          |".	//15
-	print "|                                                          |".	//16
+	print "|        Orbit        |   Burn Att   |      Execution      |".	//2
+	print "| Ap               km | P        deg | ΔVtot           m/s |".	//3
+	print "| Pe               km | Y        deg | Tgo               s |".	//4
+	print "| Incl            deg | R        deg | Vgo             m/s |".	//5
+	print "| LAN             deg |   Cur Att    |     X           m/s |".	//6
+	print "| AoP             deg | P        deg |     Y           m/s |".	//7
+	print "|---------------------| Y        deg |     Z           m/s |".	//8
+	print "|       Mnvr Tgt      | R        deg |---------------------|".	//9
+	print "| 1 Tig             s |    7 Mnvr    |        Status       |".	//10
+	print "| 2 ΔVx           m/s |--------------| Stage               |".	//11
+	print "| 3 ΔVy           m/s |    Gimbals   |---------------------|".	//12
+	print "| 4 ΔVz           m/s | P        deg |       Warp          |".	//13
+	print "|   5 Load / 6 Exec   | Y        deg | 9 Warp Tig          |".	//14
+	print "|                     |   8 Enable   | Burn warp  10 ON    |".	//15
+	print "|                                    |            11 OFF   |".	//16
 	print "|                                                          |".	//17
 
 	//    0123456789 123456789 123456789 123456789 123456789 123456789
-
-    print ".------------------------------.".	//0
-    print "|   Burn Execution Interface   |".	//1
-    print "|------------------------------|".	//2
-    print "| Status:                      |".	//3
-    print "|------------------------------|".	//4
-    print "| MET:           d   h   m   s |".	//5
-    print "|------------------------------|".	//6
-    print "| Ignition time  =           s |".	//7
-    print "| Cutoff time    =           s |".	//8
-    print "| dVgo           =         m/s |".	//9
-    print "|------------------------------|".	//10
-    print "|     Current       Target     |".	//11
-    print "| Ap          km |          km |".	//12
-    print "| Pe          km |          km |".	//13
-    print "| Inc        deg |         deg |".	//14
-    print "| AoP        deg |         deg |".	//15
-    print "| LAN        deg |         deg |".	//16
-    print "|------------------------------|".	//17
-    print "|                              |".	//18
-    print "*------------------------------*".	//19
-    //     123456789
-    //              10
-    //               123456789
-    //                        20
-    //                         123456789
-    //                                  30
-    //                                   12
 }
 
-declare function UI_Manager_BurnLayout_Update {
-    declare parameter self.
+FUNCTION UI_Manager_BurnLayout_Update {
+    parameter self.
 
-    //Status
-    print BurnTelemetry["Status"] at (RightPadding(30, BurnTelemetry["Status"]), 3).
+	//Orbit
+	IF(BurnTelemetry:Status <> "Inactive") {
+		local orbt to BurnTelemetry:Telemetry:ResultOrbit:COPY.
+		pr((orbt:Ap - Globals:R)/1000, 18, 3).
+		pr((orbt:Pe - Globals:R)/1000, 18, 4).
+		pr(orbt:Inc, 17, 5).
+		pr(orbt:LAN, 17, 6).
+		pr(orbt:AoP, 17, 7).
+	}
 
-    //Stats
-    local ignTime to ROUND((BurnTelemetry["IgnitionTime"] - TIME:SECONDS), 1).
-    if(BurnTelemetry["IgnitionTime"] > 0)
-        print ignTime at (RightPadding(28, ignTime), 7).
+	//Mnvr Tgt
+	pr(BurnTelemetry:BurnTarget:Tig - TIME:SECONDS, 19, 10).
+	local dVirf to toIRF(BurnTelemetry:Telemetry:Vgo).
+	pr(dVirf:X, 17, 11).
+	pr(dVirf:Y, 17, 12).
+	pr(dVirf:Z, 17, 13).
 
-    local coTime to ROUND(BurnTelemetry["CutoffTime"], 1).
-    if (BurnTelemetry["CutoffTime"] > 0)
-        print coTime at (RightPadding(28, coTime), 8).
-    print ROUND(BurnTelemetry["dVgo"], 1) at (RightPadding(26, ROUND(BurnTelemetry["dVgo"], 1)), 9).
+	//Burn Att
+	IF(BurnTelemetry:Status <> "Inactive") {
+		local tgtRot to NormalizeAngles(LOOKDIRUP(dVirf, toIRF(v(1, 0, 0)))).
+		local curRot to NormalizeAngles(LOOKDIRUP(toIRF(SHIP:FACING:FOREVECTOR), toIRF(SHIP:FACING:UPVECTOR))).
+		pr(tgtRot:PITCH, 32, 3).
+		pr(tgtRot:YAW, 32, 4).
+		pr(tgtRot:ROLL, 32, 5).
 
-    //Telemetry
-    local curAp to ROUND((BurnTelemetry["CurrentOrbit"]["Ap"] - Globals["R"])/1000, 2).
-    local curPe to ROUND((BurnTelemetry["CurrentOrbit"]["Pe"] - Globals["R"])/1000, 2).
-    local curInc to ROUND(BurnTelemetry["CurrentOrbit"]["Inc"], 2).
-    local curAoP to ROUND(BurnTelemetry["CurrentOrbit"]["AoP"], 2).
-    local curLAN to ROUND(BurnTelemetry["CurrentOrbit"]["LAN"], 2).
+		pr(curRot:PITCH, 32, 7).
+		pr(curRot:YAW, 32, 8).
+		pr(curRot:ROLL, 32, 9).
+	}
 
-    local tgtAp to ROUND((BurnTelemetry["TargetOrbit"]["Ap"] - Globals["R"])/1000, 2).
-    local tgtPe to ROUND((BurnTelemetry["TargetOrbit"]["Pe"] - Globals["R"])/1000, 2).
-    local tgtInc to ROUND(BurnTelemetry["TargetOrbit"]["Inc"], 2).
-    local tgtAoP to ROUND(BurnTelemetry["TargetOrbit"]["AoP"], 2).
-    local tgtLAN to ROUND(BurnTelemetry["TargetOrbit"]["LAN"], 2).
+	//Gimbals
+	IF(BurnTelemetry:Status <> "Inactive") {
+		pr(BurnTelemetry:Gimbals:Pitch, 32, 13).
+		pr(BurnTelemetry:Gimbals:Yaw, 32, 14).
+	}
 
-    print curAp at (RightPadding(13, curAp), 12).
-    print tgtAp at (RightPadding(27, tgtAp), 12).
+	//Execution
+	IF(BurnTelemetry:Status <> "Inactive") {
+		pr(BurnTelemetry:BurnTarget:dV, 54, 3).
+		pr(BurnTelemetry:Telemetry:Tgo, 56, 4).
+		pr(BurnTelemetry:Telemetry:Vgo:MAG, 54, 5).
+		local VgoIRF to toIRF(BurnTelemetry:Telemetry:Vgo).
+		pr(VgoIRF:X, 54, 6).
+		pr(VgoIRF:Y, 54, 7).
+		pr(VgoIRF:Z, 54, 8).
+	}
 
-    print curPe at (RightPadding(13, curPe), 13).
-    print tgtPe at (RightPadding(27, tgtPe), 13).
-
-    print curInc at (RightPadding(12, curInc), 14).
-    print tgtInc at (RightPadding(26, tgtInc), 14).
-
-    print curAoP at (RightPadding(12, curAoP), 15).
-    print tgtAoP at (RightPadding(26, tgtAoP), 15).
-
-    print curLAN at (RightPadding(12, curLAN), 16).
-    print tgtLAN at (RightPadding(26, tgtLAN), 16).
-
-    //Message
-    print BurnTelemetry["Message"] at (2, 18).
+	//Status
+	pr(BurnTelemetry:Status, 58, 11).
 }
 
-SET UI_Manager_PendingAdditionLayout TO LEXICON (
-	"TargetOrbit", OrbitClass:COPY,
-	"CurrentOrbit", OrbitClass:COPY,
-	"Tig", 0,
-	"Tgo", 0,
-	"Vgo", 0,
-	"Status", "",
-	"Message", "",
-	"ConfirmationFlag", false
-).
+FUNCTION UI_Manager_BurnLayout_Load {
+	IF (ComputedBurnStorage:Tig <> 0) {
+
+		return "".
+	}
+	ELSE {
+		return "ERR: NOTHING TO LOAD"
+	}
+}
+
+FUNCTION UI_Manager_BurnLayout_SetTarget {
+	declare parameter type.
+	declare parameter self.
+	declare parameter arg.
+
+	if(type = "Tig") {
+		self:Internal:PendingTarget[type] to arg:TONUMBER(0) + TIME:SECONDS.
+	}
+	set self:Internal:PendingTarget[type] to arg:TONUMBER(0).
+	local tgtVec to V(
+		self:Internal:PendingTarget:X,
+		self:Internal:PendingTarget:Y,
+		self:Internal:PendingTarget:Z
+	).
+	if(self:Internal:PendingTarget:Tig > 0) {
+		local curOrb to UpdateOrbitParams().
+		local
+		set self:Internal:PendingTarget:Obt to BuildOrbitFromVR()
+	}
+
+	return "".
+}
+
+FUNCTION UI_Manager_GetBurnLayout {
+	return LEXICON (
+		"Init", UI_Manager_BurnLayout_Init@,
+		"Update", UI_Manager_BurnLayout_Update@,
+		"Internal", LEXICON(
+			"PendingTarget", LEXICON(
+				"X", 0,
+				"Y", 0,
+				"Z", 0,
+				"Tig", 0,
+				"Obt", OrbitClass:COPY.
+			)
+		)
+		"Items", LEXICON(
+			"1", UI_Manager_BurnLayout_SetTarget@:BIND("Tig"),
+			"2", UI_Manager_BurnLayout_SetTarget@:BIND("X"),
+			"3", UI_Manager_BurnLayout_SetTarget@:BIND("Y"),
+			"4", UI_Manager_BurnLayout_SetTarget@:BIND("Z"),
+
+		)
+	).
+}

@@ -1,143 +1,148 @@
-@lazyglobal off.
+@lazyGLOBAL off.
 Import(LIST("miscellaneous")).
 
-declare global BurnTelemetry to BurnTelemetryClass:COPY.
+GLOBAL BurnTelemetryClass TO LEXICON(
+	"BurnTarget", LEXICON(
+		"Tig", 0,
+		"dV", V(0, 0, 0)
+	),
+	"Telemetry", LEXICON(
+		"Tgo", 0,
+		"Vgo", v(0, 0, 0),
+		"ResultOrbit", OrbitClass:COPY
+	),
+	"Gimals", LEXICON(
+		"Pitch", 0,
+		"Yaw", 0,
+		"Enabled", true
+	)
+	"Status", "Inactive"
+)
 
-declare function ExecBurnNew {
-	declare parameter burn.
-	declare parameter gimbal to true.
+GLOBAL BurnTelemetry TO BurnTelemetryClass:COPY.
 
-	declare local Vgo to burn["dV"].
-	declare local tImp to burn["depTime"].
-	declare local node to burn["node"].
+FUNCTION ExecBurnNew {
+	PARAMETER burn.
+	PARAMETER gimbal TO true.
 
-	declare local isWarp to true.
+	LOCAL Vgo TO burn["dV"].
+	LOCAL tImp TO burn["depTime"].
+	LOCAL node TO burn["node"].
 
-	declare local burnTime to calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
-	declare local depTime to tImp - burnTime/2.
+	LOCAL isWarp TO true.
+
+	LOCAL burnTime TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
+	LOCAL depTime TO tImp - burnTime/2.
 
 	if(burnTime < 30)
-		set isWarp to false.
+		SET isWarp TO false.
 
 	//UI
-	set BurnTelemetry["CurrentOrbit"] to depOrbit.
-	set BurnTelemetry["TargetOrbit"] to tgtOrbit.
-	set BurnTelemetry["IgnitionTime"] to depTime.
-	set BurnTelemetry["CutoffTime"] to burnTime.
-	set BurnTelemetry["dVgo"] to Vgo:MAG.
-	set BurnTelemetry["Status"] to "Attitude".
-
-	//BurnUI(1).
-	//LoopManager(0, BurnUI@).
+	SET BurnTelemetry:BurnTarget:Tig TO depTime.
+	SET BurnTelemetry:Telemetry:Tgo TO burnTime.
+	SET BurnTelemetry:Telemetry:Vgo TO Vgo.
+	SET BurnTelemetry:Status TO "Attitude".
 
 	//Attitude aqq
-	SteeringManagerSetMode("Vector", Vgo).
+	DAP:SetMode(DAP, "Inertial").
+	DAP:SetTarget(DAP, LVLHfromVector(Vgo)).
 
-	wait until (vang(ship:facing:forevector, Vgo) < 2).
+	WAIT UNTIL (vang(ship:facing:forevector, Vgo) < 2).
+	SET BurnTelemetry:Status TO "Wait Tig".
 
 	//Warp
-	set BurnTelemetry["Status"] to "Warp".
-	kuniverse:timewarp:WARPTO(depTime - (ullageDuration + 5)).
-	wait until (depTime - TIME:SECONDS < ullageDuration).
+	WAIT UNTIL (depTime - TIME:SECONDS < ullageDuration).
 
 	//Ullage
-	set BurnTelemetry["Status"] to "Ullage".
-	set Thrust to 1.
-	wait until (EngineController(Systems["Engine"]) = true).
+	SET BurnTelemetry["Status"] TO "Ullage".
+	SET Thrust TO 1.
+	WAIT UNTIL (EngineController(Systems["Engine"]) = true).
 	EngineController(Systems["Engine"], 1).
 	rcs off.
 
 	//Warp
 	if(isWarp = true) {
-		set kuniverse:timewarp:mode to "PHYSICS".
-		set kuniverse:timewarp:warp to 2.
+		SET kuniverse:timewarp:mode TO "PHYSICS".
+		SET kuniverse:timewarp:warp TO 2.
 	}
 
 	//Main loop
-	set BurnTelemetry["Status"] to "Burn".
-	declare local cutoff to false.
-	declare local curTime to TIME:SECONDS.
-	declare local prevTime to 0.
-	declare local warpFlag to true.
-	until (cutoff = true) {
+	SET BurnTelemetry["Status"] TO "Burn".
+	LOCAL cutoff TO false.
+	LOCAL curTime TO TIME:SECONDS.
+	LOCAL prevTime TO 0.
+	LOCAL warpFlag TO true.
+	UNTIL (cutoff = true) {
 		//Update time
-		set prevTime to curTime.
-		set curTime to TIME:SECONDS.
+		SET prevTime TO curTime.
+		SET curTime TO TIME:SECONDS.
 
-		//Update local Vgo
-		set Vgo to Vgo - ship:facing:forevector:normalized * ((Specs["EngineThrust"]/SHIP:MASS) * (curTime - prevTime)).
+		//Update LOCAL Vgo
+		SET Vgo TO Vgo - ship:facing:forevector:normalized * ((Specs["EngineThrust"]/SHIP:MASS) * (curTime - prevTime)).
 
-		//Try to recalculate Vgo
-		local curOrbit to UpdateOrbitParams().
-		declare local _burn to OrbitTransfer(curOrbit, tgtOrbit, 10).
+		//Try TO recalculate Vgo
+		LOCAL curOrbit TO UpdateOrbitParams().
+		LOCAL _burn TO OrbitTransfer(curOrbit, tgtOrbit, 10).
 		if(_burn["result"] = 1) {
-			local VgoNew to _burn["dV"].
+			LOCAL VgoNew TO _burn["dV"].
 			if(VANG(VgoNew, Vgo) < 1 and ABS(VgoNew:MAG - Vgo:MAG) < 1) {
-				set Vgo to VgoNew.
-				set BurnTelemetry["Message"] to "Updated Vgo".
+				SET Vgo TO VgoNew.
 			}
 			else {
-				set BurnTelemetry["Message"] to "Vgo divergence, using old".
 			}
-		}
-		else {
-			set BurnTelemetry["Message"] to "Old Vgo".
 		}
 
 		//Update attitude
-		SteeringManagerSetMode("Vector", Vgo).
+		DAP:SetTarget(DAP, LVLHfromVector(Vgo)).
 
-		local Tgo to calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
-		set BurnTelemetry["CurrentOrbit"] to curOrbit.
-		set BurnTelemetry["dVgo"] to Vgo:mag.
-		set BurnTelemetry["CutoffTime"] to Tgo.
+		LOCAL Tgo TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
+		SET BurnTelemetry:Telemetry:Vgo TO Vgo.
+		SET BurnTelemetry:Telemetry:Tgo TO Tgo.
 
 		if(Vgo:mag < 5 AND warpFlag = true) {
-			set kuniverse:timewarp:mode to "PHYSICS".
-			set kuniverse:timewarp:warp to 0.
-			set warpFlag to false.
+			SET kuniverse:timewarp:mode TO "PHYSICS".
+			SET kuniverse:timewarp:warp TO 0.
+			SET warpFlag TO false.
 		}
 
 		if(Vgo:mag < 3) {
-			wait Tgo.
-			set Thrust to 0.
+			WAIT Tgo.
+			SET Thrust TO 0.
 			EngineController(Systems["Engine"], 0).
 
-			set cutoff to true.
-			set BurnTelemetry["Status"] to "Cutoff".
-			set curOrbit to UpdateOrbitParams().
-			set BurnTelemetry["CurrentOrbit"] to curOrbit.
+			SET cutoff TO true.
+			SET BurnTelemetry["Status"] TO "Cutoff".
+			SET curOrbit TO UpdateOrbitParams().
 		}
 	}
 
 	rcs on.
-	SteeringManagerSetMode("Attitude").
-	wait 5.
-	//LoopManager(1, BurnUI@).
-	//BurnUI(2).
-	wait 1.
+	DAP:SetMode(DAP, "Inertial").
+	WAIT 5.
+	set BurnTelemetry to BurnTelemetryClass:COPY.
+	WAIT 1.
 }
 
-declare function RendezvousManager {
-	declare parameter ops.
+FUNCTION RendezvousManager {
+	PARAMETER ops.
 
-	declare function correct {
-		declare parameter chaserShip, targetShip, targetPosition, arrivalTime.
-		declare parameter cont to false.
-		local warpEnabled to false.
-		local corrected to false.
-		until (corrected = true) {
+	FUNCTION correct {
+		PARAMETER chaserShip, targetShip, targetPosition, arrivalTime.
+		PARAMETER cont TO false.
+		LOCAL warpEnabled TO false.
+		LOCAL corrected TO false.
+		UNTIL (corrected = true) {
 			if(cont = true and warpEnabled = false) {
-				set kuniverse:timewarp:mode to "PHYSICS".
-				set kuniverse:timewarp:warp to 3.
-				set warpEnabled to true.
+				SET kuniverse:timewarp:mode TO "PHYSICS".
+				SET kuniverse:timewarp:warp TO 3.
+				SET warpEnabled TO true.
 			}
 
-			local requiredChange to CWequationCurrentVelFromFuturePos(chaserShip, targetShip, targetPosition, 0, arrivalTime - TIME:SECONDS).
+			LOCAL requiredChange TO CWequationCurrentVelFromFuturePos(chaserShip, targetShip, targetPosition, 0, arrivalTime - TIME:SECONDS).
 
-			local shipBasis to LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
-			local shipBasis to getTransform(shipBasis).
-			local dV to VCMT(shipBasis:Transform, requiredChange:targetChaserVelocity - requiredChange:chaserVelocity).
+			LOCAL shipBasis TO LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
+			LOCAL shipBasis TO getTransform(shipBasis).
+			LOCAL dV TO VCMT(shipBasis:Transform, requiredChange:targetChaserVelocity - requiredChange:chaserVelocity).
 
 			clearscreen.
 			print "Correcting" at (0, 0).
@@ -162,84 +167,84 @@ declare function RendezvousManager {
 			print "Pos z: " + targetPosition:Z at (0,19).
 
 			print "dV mag: " + dV:MAG at (0, 21).
-			print "time to WP: " + (arrivalTime - TIME:SECONDS) at (0, 22).
+			print "time TO WP: " + (arrivalTime - TIME:SECONDS) at (0, 22).
 
 			if(TIME:SECONDS + requiredChange:LVLHrelativeVelocity:MAG/0.1 > arrivalTime) {
-				set SHIP:CONTROL:NEUTRALIZE to true.
-				set corrected to true.
-				set kuniverse:timewarp:mode to "PHYSICS".
-				set kuniverse:timewarp:warp to 0.
+				SET SHIP:CONTROL:NEUTRALIZE TO true.
+				SET corrected TO true.
+				SET kuniverse:timewarp:mode TO "PHYSICS".
+				SET kuniverse:timewarp:warp TO 0.
 			}
 			if(dV:MAG < 0.05) {
-				set SHIP:CONTROL:NEUTRALIZE to true.
+				SET SHIP:CONTROL:NEUTRALIZE TO true.
 				if(cont = false)
-					set corrected to true.
+					SET corrected TO true.
 			}
 			else {
-				set SHIP:CONTROL:TRANSLATION to dV*5.
+				SET SHIP:CONTROL:TRANSLATION TO dV*5.
 			}
-			wait 0.5.
+			WAIT 0.5.
 		}
 	}
 
-	declare function killRelVel {
-		declare parameter chaserShip, targetShip.
+	FUNCTION killRelVel {
+		PARAMETER chaserShip, targetShip.
 
-		local corrected to false.
-		until (corrected = true) {
+		LOCAL corrected TO false.
+		UNTIL (corrected = true) {
 
-			local shipBasis to LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
-			local shipBasis to getTransform(shipBasis).
+			LOCAL shipBasis TO LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
+			LOCAL shipBasis TO getTransform(shipBasis).
 
-			local dV to VCMT(shipBasis:Transform, targetShip:VELOCITY:ORBIT - chaserShip:VELOCITY:ORBIT).
+			LOCAL dV TO VCMT(shipBasis:Transform, targetShip:VELOCITY:ORBIT - chaserShip:VELOCITY:ORBIT).
 			if(dV:MAG < 0.05) {
-				set SHIP:CONTROL:NEUTRALIZE to true.
-				set corrected to true.
+				SET SHIP:CONTROL:NEUTRALIZE TO true.
+				SET corrected TO true.
 			}
 			else {
-				set SHIP:CONTROL:TRANSLATION to dV*5.
+				SET SHIP:CONTROL:TRANSLATION TO dV*5.
 			}
-			wait 0.1.
+			WAIT 0.1.
 		}
 	}
 
-	declare local chaserShip to ops:chaserShip.
-	declare local targetShip to ops:targetShip.
+	LOCAL chaserShip TO ops:chaserShip.
+	LOCAL targetShip TO ops:targetShip.
 
-	declare local legs to ops:legs.
+	LOCAL legs TO ops:legs.
 
-	until (legs:length = 0) {
-		local leg to legs:POP().
+	UNTIL (legs:length = 0) {
+		LOCAL leg TO legs:POP().
 
-		local currentState to CWequationFutureFromCurrent(chaserShip, targetShip, 0, 0).
+		LOCAL currentState TO CWequationFutureFromCurrent(chaserShip, targetShip, 0, 0).
 
-		local targetPosition to leg:targetPosition.
-		local cont to leg:cont.
-		local arrivalTime to 0.
-		local legTime to 0.
-		local legVelocity to 0.
+		LOCAL targetPosition TO leg:targetPosition.
+		LOCAL cont TO leg:cont.
+		LOCAL arrivalTime TO 0.
+		LOCAL legTime TO 0.
+		LOCAL legVelocity TO 0.
 
 		if(leg:HASKEY("arrivalTime")) {
-			set arrivalTime to leg:arrivalTime.
-			set legTime to (arrivalTime - TIME:SECONDS)/2.
-			set legVelocity to (targetPosition - currentState:LVLHrelativePosition):MAG/legTime.
+			SET arrivalTime TO leg:arrivalTime.
+			SET legTime TO (arrivalTime - TIME:SECONDS)/2.
+			SET legVelocity TO (targetPosition - currentState:LVLHrelativePosition):MAG/legTime.
 		}
 		else {
-			set legVelocity to leg:legVelocity.
-			set legTime to (targetPosition - currentState:LVLHrelativePosition):MAG/legVelocity + 20.
-			set arrivalTime to legTime + TIME:SECONDS.
+			SET legVelocity TO leg:legVelocity.
+			SET legTime TO (targetPosition - currentState:LVLHrelativePosition):MAG/legVelocity + 20.
+			SET arrivalTime TO legTime + TIME:SECONDS.
 		}
 
 		correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
 
 		if(cont = false) {
 			kuniverse:timewarp:warpto(arrivalTime - legTime/2).
-			wait until (time:seconds - 2 > arrivalTime - legTime/2).
+			WAIT UNTIL (time:seconds - 2 > arrivalTime - legTime/2).
 
 			correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
 
 			kuniverse:timewarp:warpto(arrivalTime - legVelocity/0.1).
-			wait until (time:seconds - 2 > arrivalTime - legVelocity/0.1).
+			WAIT UNTIL (time:seconds - 2 > arrivalTime - legVelocity/0.1).
 		}
 		if(leg:HASKEY("killRelVel") and leg:killRelVel = true) {
 			killRelVel(chaserShip, targetShip).

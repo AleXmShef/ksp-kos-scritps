@@ -55,15 +55,17 @@ DECLARE FUNCTION UI_Manager_OrbitLayout_Update {
 	pr(self:Data:StateVector:Velocity:Z, 54, 8).
 }
 
-SET UI_Manager_PendingAdditionLayout TO LEXICON(
-	"Init", UI_Manager_OrbitLayout_Init@,
-	"Update", UI_Manager_OrbitLayout_Update@,
-	"Data", LEXICON(
-		"Orbit", 0,
-		"StateVector", LEXICON(
-			"Position", 0,
-			"Velocity", 0
-		)
-	),
-	"Items", LEXICON()
-).
+FUNCTION UI_Manager_GetOrbitLayout {
+	return LEXICON(
+		"Init", UI_Manager_OrbitLayout_Init@,
+		"Update", UI_Manager_OrbitLayout_Update@,
+		"Data", LEXICON(
+			"Orbit", 0,
+			"StateVector", LEXICON(
+				"Position", 0,
+				"Velocity", 0
+			)
+		),
+		"Items", LEXICON()
+	).
+}

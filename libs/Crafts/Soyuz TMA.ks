@@ -1,28 +1,28 @@
 @lazyglobal off.
 clearscreen.
-SET config:IPU to 2000.
+SET config:IPU TO 2000.
 //-------------------------------------Import Libraries----------------------------------------
-Import(list("orbits", "propulsion", "maneuvers", "SteeringManager", "miscellaneous")).
+Import(list("orbits", "propulsion", "maneuvers", "DAP", "miscellaneous")).
 
-DECLARE GLOBAL Components to lexicon().
+GLOBAL Components TO lexicon().
 
-DECLARE FUNCTION PopulateParts {
-	set Components["SM"] to CORE:PART.
-	set Components["SM_Separator"] to GetConnectedParts(Components["SM"], "SOYUZ.SEPARATOR").
-	set Components["dockingAntenna"] to GetConnectedParts(Components["SM"], "SOYUZ.DockingAntenna").
-	set Components["heatShield"] to GetConnectedParts(Components["SM_Separator"], "SOYUZ.HEAT.SHIELD").
-	set Components["DM"] to GetConnectedParts(Components["heatShield"], "SOYUZ.REENTRY.CAPSULE").
-	set Components["mainChute"] to GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE").
-	set Components["spareChute"] to GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE.SPARE").
-	set Components["perescope"] to GetConnectedParts(Components["DM"], "SOYUZ.PERESCOPE").
-	set Components["OM"] to GetConnectedParts(Components["DM"], "SOYUZ.orbitalSegment").
-	set Components["dockingPort"] to GetConnectedParts(Components["OM"], "SOYUZdockingPort").
-	set Components["solarPanels"] to GetConnectedParts(SM, "SOYUZ.SOLAR.Panel").
+FUNCTION PopulateParts {
+	SET Components["SM"] TO CORE:PART.
+	SET Components["SM_Separator"] TO GetConnectedParts(Components["SM"], "SOYUZ.SEPARATOR").
+	SET Components["dockingAntenna"] TO GetConnectedParts(Components["SM"], "SOYUZ.DockingAntenna").
+	SET Components["heatShield"] TO GetConnectedParts(Components["SM_Separator"], "SOYUZ.HEAT.SHIELD").
+	SET Components["DM"] TO GetConnectedParts(Components["heatShield"], "SOYUZ.REENTRY.CAPSULE").
+	SET Components["mainChute"] TO GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE").
+	SET Components["spareChute"] TO GetConnectedParts(Components["DM"], "SOYUZ.PARASHUTE.SPARE").
+	SET Components["perescope"] TO GetConnectedParts(Components["DM"], "SOYUZ.PERESCOPE").
+	SET Components["OM"] TO GetConnectedParts(Components["DM"], "SOYUZ.orbitalSegment").
+	SET Components["dockingPort"] TO GetConnectedParts(Components["OM"], "SOYUZdockingPort").
+	SET Components["solarPanels"] TO GetConnectedParts(SM, "SOYUZ.SOLAR.Panel").
 }
 
 PopulateParts().
 
-DECLARE GLOBAL Systems to lexicon(
+GLOBAL Systems TO lexicon(
 						"Engine", Components:SM:GETMODULE("ModuleEnginesRF"),
 						"MainAntenna", Components:dockingAntenna:GETMODULE("ModuleRTAntenna"),
 						"SM_Separator", Components:SM_Separator:GETMODULE("ModuleDecouple"),
@@ -32,51 +32,86 @@ DECLARE GLOBAL Systems to lexicon(
 						"DockingPort", Components:dockingPort:GETMODULE("ModuleDockingNode")
 ).
 
-DECLARE GLOBAL Specs to lexicon(
+GLOBAL Specs TO lexicon(
 						"EngineThrust", 2.95,
 						"EngineIsp", 302,
 						"UllageRcsThrust", 0.13*4,
 						"UllageRcsIsp", 291
 ).
 
-DECLARE GLOBAL CurrentMode TO 0.
-DECLARE GLOBAL Thrust TO 0.
-DECLARE GLOBAL ArrivalTime TO 0.
-DECLARE GLOBAL testFlag TO 0.
+FUNCTION UpdateDAP {
+	DAP:Update(DAP).
+}
 
-DECLARE GLOBAL Modes TO LEXICON(
+FUNCTION UpdateUI {
+	UI:Update(UI).
+}
+
+FUNCTION AcquireControls {
+	lock Throttle to Thrust + LoopManager().
+}
+
+FUNCTION ExecTask {
+	LOCAL task TO TaskQueue:POP().
+}
+
+GLOBAL CurrentMode TO 0.
+GLOBAL Thrust TO 0.
+GLOBAL DAP TO GetDAP().
+GLOBAL UI to GetUImanager().
+GLOBAL TaskQueue TO QUEUE().
+
+LoopManager(0, UpdateDAP@).
+LoopManager(0, UpdateUI@).
+
+GLOBAL Modes TO LEXICON(
 	"98", "Nothing",
 	"99", "Bebug",
 	"100", "Boot",
 	"101", "Ascent",
 	"102", "Insertion",
 	"202", "OnOrbit",
-	"203", "Docking",
+	//"203", "Docking",
 	"204", "Docked",
 	"301", "Deorbit",
 	"302", "Abort",
 	"400", "Shutdown",
 	"401", "Reboot"
-)
+).
 
-declare function ModeController {
-	declare parameter TargetMode.
-	if(TargetMode = "400")
+Import(LIST(
+	"UI/Layouts/OrbitLayout",
+	"UI/Layouts/BootLayout",
+	"UI/Layouts/BurnLayout"
+)).
+
+GLOBAL UIlayouts TO LEXICON(
+	"OrbitLayout", UI_Manager_GetOrbitLayout(),
+	"BootLayout", UI_Manager_GetBootLayout(),
+	"AscentLayout", UI_MAnager_GetAscentLayout(),
+	"BurnLayout", UI_Manager_GetBurnLayout()
+).
+
+FUNCTION ModeController {
+	PARAMETER TargetMode.
+	IF(TargetMode = "400")
 		shutdown.
-	else if(TargetMode = "401")
+	ELSE IF(TargetMode = "401")
 		reboot.
-	else if(Modes:HASKEY(TargetMode)) {
-		set CurrentMode TO TargetMode.
-		local lmj to LEXICON("Mode", TargetMode).
+	ELSE IF(Modes:HASKEY(TargetMode)) {
+		SET CurrentMode TO TargetMode.
+		LOCAL lmj TO LEXICON("Mode", TargetMode).
 		WRITEJSON(lmj, "1:/LastMode.json").
 	}
 }
 
-if(exists("1:/LastMode.json")) {
-	local last_mode_json to READJSON("1:/LastMode.json").
+
+
+IF(exists("1:/LastMode.json")) {
+	LOCAL last_mode_json TO READJSON("1:/LastMode.json").
 	ModeController(last_mode_json:Mode).
 }
-else
+ELSE
 	ModeController("100").
 
 UNTIL (CurrentMode = "400") {
@@ -89,43 +124,53 @@ UNTIL (CurrentMode = "400") {
 	ELSE IF (CurrentMode = "98") {
 		WAIT UNTIL CurrentMode <> "Nothing".
 	}
+	ELSE IF (CurrentMode = "100") {
+		UI:AddLayout(UI, UIlayouts:BootLayout, "1").
+		UNTIL (CurrentMode <> "100") {
+			UpdateUI().
+		}
+		UI:RemoveLayout(UI, "1").
+	}
 	ELSE IF (CurrentMode = "101") {
-		WAIT UNTIL (not CORE:MESSAGES:EMPTY or CurrentMode <> "101").
+		UI:AddLayout(UI, UIlayouts:AscentLayout, "2").
+		UNTIL (not CORE:MESSAGES:EMPTY or CurrentMode <> "101") {
+			UpdateUI().
+		}.
 		IF (not CORE:MESSAGES:EMPTY) {
 			LOCAL Recieved TO CORE:MESSAGES:POP.
 			IF Recieved:content = "Successful ascent" {
 				ModeController("102").
+				UI:RemoveLayout(UI, "2").
 			}
 		}
 	}
-	ELSE IF (CurrentMode = "ParkingOrbit") {
-		SteeringManagerMaster(1).
-		SteeringManagerSetMode("Attitude").
-		LoopManager(0, SteeringManager@).
+	ELSE IF (CurrentMode = "102") {
+		//DAP Init
+		AcquireControls().
+		DAP:Init(DAP).
 		wait 1.
-		LOCK THROTTLE TO Thrust + LoopManager().
-		WAIT 1.
-		ModeController("Decouple").
-	}
-	ELSE IF (CurrentMode = "Decouple") {
+
+		//Separation
 		RCS ON.
-		WAIT 2.
+		WAIT 1.
 		STAGE.
 		SET SHIP:CONTROL:FORE TO 1.
 		WAIT 2.
 		SET SHIP:CONTROL:FORE TO 0.
 		WAIT 1.
-		ModeController("Insertion").
-	}
-	ELSE IF (CurrentMode = "102") {
+
+		//UI
+		UI:AddLayout(UI, UIlayouts:BurnLayout, "34").
+
+		//Insertion burn
 		LOCAL CurrentOrbit TO UpdateOrbitParams().
 
 		LOCAL TargetOrbit IS OrbitClass:copy.
-		SET TargetOrbit["Ap"] to 210*1000 + Globals["R"].
-		SET TargetOrbit["Pe"] to 209*1000 + Globals["R"].
-		SET TargetOrbit["Inc"] to CurrentOrbit["Inc"].
-		SET TargetOrbit["LAN"] to CurrentOrbit["LAN"].
-		SET TargetOrbit["AoP"] to CurrentOrbit["AoP"].
+		SET TargetOrbit["Ap"] TO 210*1000 + Globals["R"].
+		SET TargetOrbit["Pe"] TO 209*1000 + Globals["R"].
+		SET TargetOrbit["Inc"] TO CurrentOrbit["Inc"].
+		SET TargetOrbit["LAN"] TO CurrentOrbit["LAN"].
+		SET TargetOrbit["AoP"] TO CurrentOrbit["AoP"].
 
 		SET TargetOrbit TO BuildOrbit(TargetOrbit).
 
@@ -133,12 +178,18 @@ UNTIL (CurrentMode = "400") {
 
 		ExecBurnNew(InsertionBurn, CurrentOrbit, TargetOrbit).
 
-		WAIT 5.
+		WAIT 2.
 
-		ModeController("CoellipticPhase").
+		ModeController("202").
 	}
 	ELSE IF (CurrentMode = "202") {
+		AcquireControls().
+		UNTIL(CurrentMode <> "202") {
+			IF(TaskQueue:LENGTH > 0) {
 
+
+			}
+		}
 	}
 	ELSE IF (CurrentMode = "CoellipticPhase") {
 		SET TARGET TO "Soyuz Docking Target".
@@ -156,15 +207,15 @@ UNTIL (CurrentMode = "400") {
 			SET kuniverse:timewarp:mode TO "RAILS".
 			KUNIVERSE:TIMEWARP:WARPTO(warpToTime).
 			WAIT UNTIL (TIME:SECONDS > warpToTime + 2).
-			set burn to RendezvousTransfer(CurrentOrbit, TargetOrbit, YBarDistance, RBarDistance, SHIP:ORBIT:TRUEANOMALY, TARGET:ORBIT:TRUEANOMALY).
+			SET burn TO RendezvousTransfer(CurrentOrbit, TargetOrbit, YBarDistance, RBarDistance, SHIP:ORBIT:TRUEANOMALY, TARGET:ORBIT:TRUEANOMALY).
 		}
 
-		set burn["depTime"] to burn["depTime"] + TIME:SECONDS.
-		local depR to RatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)).
-		local depV to VatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)) + burn["dV"].
+		SET burn["depTime"] TO burn["depTime"] + TIME:SECONDS.
+		LOCAL depR TO RatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)).
+		LOCAL depV TO VatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)) + burn["dV"].
 		LOCAL transferOrbit is BuildOrbitFromVR(depV, depR).
 
-		local trueBurn to OrbitTransfer(CurrentOrbit, transferOrbit).
+		LOCAL trueBurn TO OrbitTransfer(CurrentOrbit, transferOrbit).
 
 		clearscreen.
 		print "perf test".
@@ -197,20 +248,20 @@ UNTIL (CurrentMode = "400") {
 		SET TARGET TO "Soyuz Docking Target".
 		LOCAL ISS IS Vessel("Soyuz Docking Target").
 
-		SET ISS:LOADDISTANCE:ORBIT:UNPACK to 1200.
+		SET ISS:LOADDISTANCE:ORBIT:UNPACK TO 1200.
 
 		LOCAL state TO CWequationFutureFromCurrent(Ship, ISS, 0, 0).
 
 		LOCAL timeToRbar TO ABS(state:LVLHrelativePosition:Y)/ABS(state:LVLHrelativeVelocity:Y) + TIME:SECONDS.
 
-		local RendezvousManagerOps TO LEXICON().
-		set RendezvousManagerOps["chaserShip"] to Ship.
-		set RendezvousManagerOps["targetShip"] to ISS.
+		LOCAL RendezvousManagerOps TO LEXICON().
+		SET RendezvousManagerOps["chaserShip"] TO Ship.
+		SET RendezvousManagerOps["targetShip"] TO ISS.
 
-		local legs is Queue().
+		LOCAL legs is Queue().
 		legs:PUSH(LEXICON("targetPosition", V(-1000, 0, 0), "arrivalTime", timeToRbar, "cont", false)).
 
-		set RendezvousManagerOps["legs"] to legs.
+		SET RendezvousManagerOps["legs"] TO legs.
 		RendezvousManager(RendezvousManagerOps).
 
 		ModeController("ProximityOps").
@@ -220,15 +271,15 @@ UNTIL (CurrentMode = "400") {
 		SET TARGET TO "Soyuz Docking Target".
 		LOCAL ISS IS Vessel("Soyuz Docking Target").
 
-		local RendezvousManagerOps TO LEXICON().
-		set RendezvousManagerOps["chaserShip"] to Ship.
-		set RendezvousManagerOps["targetShip"] to ISS.
+		LOCAL RendezvousManagerOps TO LEXICON().
+		SET RendezvousManagerOps["chaserShip"] TO Ship.
+		SET RendezvousManagerOps["targetShip"] TO ISS.
 
-		local legs is Queue().
+		LOCAL legs is Queue().
 		legs:PUSH(LEXICON("targetPosition", V(-500, 0, 0), "legVelocity", 2, "cont", false)).
 		legs:PUSH(LEXICON("targetPosition", V(-100, 0, 0), "legVelocity", 1, "cont", true, "killRelVel", true)).
 
-		set RendezvousManagerOps["legs"] to legs.
+		SET RendezvousManagerOps["legs"] TO legs.
 
 		RendezvousManager(RendezvousManagerOps).
 

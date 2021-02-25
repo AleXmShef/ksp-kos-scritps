@@ -5,6 +5,8 @@ Import(LIST("UI/UI_Utils")).
 declare function GetUImanager {
 	return LEXICON(
 		"AddLayout", UI_Manager_AddLayout@,
+		"RemoveLayout", UI_Manager_RemoveLayout@,
+		"SetLayout", UI_Manager_Change_ActiveLayout@,
 		"Start", UI_Manager_Start@,
 		"Stop", UI_Manager_Stop@,
 		"Update", UI_Manager_BigUpdate@,
@@ -25,14 +27,22 @@ declare function GetUImanager {
 	).
 }
 
+declare function UI_Manager_RemoveLayout {
+	declare parameter self.
+	declare parameter key.
+
+	if(self:Layouts:HASKEY(key))
+		self:Layouts:REMOVE(key).
+}
+
 declare function UI_Manager_AddLayout {
 	declare parameter self.
+	declare parameter key.
 	declare parameter layout.
-	Import(LIST("UI/Layouts/" + layout + "Layout")).
 
-	self:Layouts:ADD(UI_Manager_PendingAdditionLayout:COPY).
+	set self:Layouts[key] to UI_Manager_PendingAdditionLayout.
 	if(self:Layouts:LENGTH = 1)
-		UI_Manager_Change_ActiveLayout(self, 0).
+		UI_Manager_Change_ActiveLayout(self, key).
 }
 
 declare function UI_Manager_Update {
@@ -81,12 +91,16 @@ declare function UI_Manager_ExecCommand {
 		for key in self:Layouts[self:Data:ActiveLayout]:Items:KEYS {
 			local item to self:Layouts[self:Data:ActiveLayout]:Items[key].
 			if(item:Number = itemNumber) {
-				item:Action(self:Layouts[self:Data:ActiveLayout], itemArg).
+				local result to item:Action(self:Layouts[self:Data:ActiveLayout], itemArg).
+				if(result <> "") {
+					set self:Command:stage to 4.
+					set self:Command:str to result.
+				}
 			}
 		}
 	}
 	else if(self:Command:OP = "SPEC") {
-		local spec to self:Command:ARG:TONUMBER(-1).
+		local spec to self:Command:ARG.
 		UI_Manager_Change_ActiveLayout(spec).
 	}
 	else if(self:Command:OP = "OPS") {
@@ -185,10 +199,10 @@ declare function UI_Manager_Start {
 
 declare function UI_Manager_Change_ActiveLayout {
 	declare parameter self.
-	declare parameter layoutIndex.
+	declare parameter layoutKey.
 
-	if(self:Layouts:LENGTH > layoutIndex)
-		set self:Data:ActiveLayout to layoutIndex.
+	if(self:Layouts:HASKEY(layoutKey))
+		set self:Data:ActiveLayout to layoutKey.
 	UI_Manager_Refresh(self).
 }
 

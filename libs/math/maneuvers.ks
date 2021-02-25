@@ -12,7 +12,6 @@ declare function calcBurnTime {
 	local BurnTime to PropMass/Mdot.
 
 	return BurnTime.
-
 }
 
 declare function calcDeltaVfromBurnTime {
@@ -198,29 +197,6 @@ declare function RendezvousTransfer {
 
 }
 
-declare function getLVLHfromR {
-	DECLARE PARAMETER orbit.
-	DECLARE PARAMETER position.
-
-	LOCAL plusX IS position:VEC.
-	SET plusX:MAG TO 1.
-
-	LOCAL plusY TO -VCRS(ANNorm(orbit["LAN"], orbit["Inc"]):UPVECTOR:NORMALIZED, plusX).
-	SET plusY:MAG TO 1.
-
-	LOCAL plusZ IS VCRS(plusX, plusY).
-	SET plusZ:MAG TO 1.
-
-	RETURN getTransform(LEXICON("x", plusX, "y", plusY, "z", plusZ)).
-}
-
-declare function getTransform {
-	DECLARE PARAMETER basis.
-	LOCAL transform TO BuildTransformMatrix(basis).
-	LOCAL transform_inv to MatrixFindInverse(transform).
-	return lexicon("Transform", BuildTransformMatrix(basis), "Inverse", transform_inv, "Basis", basis).
-}
-
 declare function CWequationFutureFromCurrent {
 	DECLARE PARAMETER chaserShip.
 	DECLARE PARAMETER targetShip.
@@ -241,7 +217,7 @@ declare function CWequationFutureFromCurrent {
 
 	//Convert ECI to LVLH
 	//Create target LVLH basis
-	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
+	LOCAL LVLH IS LVLHfromR(targetOrbit, targetPosition).
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.
@@ -312,7 +288,7 @@ declare function CWequationCurrentVelFromFuturePos {
 
 	//Convert ECI to LVLH
 	//Create target LVLH basis
-	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
+	LOCAL LVLH IS LVLHfromR(targetOrbit, targetPosition).
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.
