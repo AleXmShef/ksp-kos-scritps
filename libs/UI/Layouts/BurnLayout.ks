@@ -32,21 +32,19 @@ FUNCTION UI_Manager_BurnLayout_Update {
     parameter self.
 
 	//Orbit
-	IF(BurnTelemetry:Status <> "Inactive") {
-		local orbt to BurnTelemetry:Telemetry:ResultOrbit:COPY.
-		pr((orbt:Ap - Globals:R)/1000, 18, 3).
-		pr((orbt:Pe - Globals:R)/1000, 18, 4).
-		pr(orbt:Inc, 17, 5).
-		pr(orbt:LAN, 17, 6).
-		pr(orbt:AoP, 17, 7).
-	}
+	local orbt to self:Internal:PendingTarget:Obt:COPY.
+	pr((orbt:Ap - Globals:R)/1000, 18, 3).
+	pr((orbt:Pe - Globals:R)/1000, 18, 4).
+	pr(orbt:Inc, 17, 5).
+	pr(orbt:LAN, 17, 6).
+	pr(orbt:AoP, 17, 7).
+
 
 	//Mnvr Tgt
-	pr(BurnTelemetry:BurnTarget:Tig - TIME:SECONDS, 19, 10).
-	local dVirf to toIRF(BurnTelemetry:Telemetry:Vgo).
-	pr(dVirf:X, 17, 11).
-	pr(dVirf:Y, 17, 12).
-	pr(dVirf:Z, 17, 13).
+	pr(self:Internal:PendingTarget:Tig - TIME:SECONDS, 19, 10).
+	pr(self:Internal:PendingTarget:X, 17, 11).
+	pr(self:Internal:PendingTarget:Y, 17, 12).
+	pr(self:Internal:PendingTarget:Z, 17, 13).
 
 	//Burn Att
 	IF(BurnTelemetry:Status <> "Inactive") {
@@ -84,12 +82,26 @@ FUNCTION UI_Manager_BurnLayout_Update {
 
 FUNCTION UI_Manager_BurnLayout_Load {
 	IF (ComputedBurnStorage:Tig <> 0) {
-
+		set self:Internal:PendingTarget:Tig to ComputedBurnStorage:Tig.
+		set self:Internal:PendingTarget:dV to toIRF(ComputedBurnStorage:dV).
+		set self:Internal:PendingTarget:X to self:Internal:PendingTarget:dV:X.
+		set self:Internal:PendingTarget:Y to self:Internal:PendingTarget:dV:Y.
+		set self:Internal:PendingTarget:Z to self:Internal:PendingTarget:dV:Z.
 		return "".
 	}
 	ELSE {
 		return "ERR: NOTHING TO LOAD"
 	}
+}
+
+FUNCTION UI_Manager_BurnLayout_Exec {
+	TaskQueue:PUSH(
+		LEXICON(
+			"Type", "Burn",
+			"Tig", self:Internal:PendingTarget:Tig,
+			"dV", fromIRF(self:Internal:PendingTarget:dV)
+		)
+	)
 }
 
 FUNCTION UI_Manager_BurnLayout_SetTarget {
@@ -101,15 +113,19 @@ FUNCTION UI_Manager_BurnLayout_SetTarget {
 		self:Internal:PendingTarget[type] to arg:TONUMBER(0) + TIME:SECONDS.
 	}
 	set self:Internal:PendingTarget[type] to arg:TONUMBER(0).
-	local tgtVec to V(
+	set self:Internal:PendingTarget:dV to fromIRF(V(
 		self:Internal:PendingTarget:X,
 		self:Internal:PendingTarget:Y,
 		self:Internal:PendingTarget:Z
-	).
+	)).
 	if(self:Internal:PendingTarget:Tig > 0) {
 		local curOrb to UpdateOrbitParams().
-		local
-		set self:Internal:PendingTarget:Obt to BuildOrbitFromVR()
+		local depR to RatAngle(curOrb, AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, self:Internal:PendingTarget:Tig - TIME:SECONDS)).
+		local depV to VatAngle(
+			curOrb,
+			AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, self:Internal:PendingTarget:Tig - TIME:SECONDS)
+		) + fromIRF(self:Internal:PendingTarget:dV).
+		set self:Internal:PendingTarget:Obt to BuildOrbitFromVR(depV, depR).
 	}
 
 	return "".
@@ -124,6 +140,7 @@ FUNCTION UI_Manager_GetBurnLayout {
 				"X", 0,
 				"Y", 0,
 				"Z", 0,
+				"dV", v(0, 0, 0),
 				"Tig", 0,
 				"Obt", OrbitClass:COPY.
 			)
@@ -132,8 +149,7 @@ FUNCTION UI_Manager_GetBurnLayout {
 			"1", UI_Manager_BurnLayout_SetTarget@:BIND("Tig"),
 			"2", UI_Manager_BurnLayout_SetTarget@:BIND("X"),
 			"3", UI_Manager_BurnLayout_SetTarget@:BIND("Y"),
-			"4", UI_Manager_BurnLayout_SetTarget@:BIND("Z"),
-
+			"4", UI_Manager_BurnLayout_SetTarget@:BIND("Z")
 		)
 	).
 }

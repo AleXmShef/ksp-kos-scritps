@@ -24,12 +24,18 @@ GLOBAL BurnTelemetry TO BurnTelemetryClass:COPY.
 FUNCTION ExecBurnNew {
 	PARAMETER burn.
 	PARAMETER gimbal TO true.
+	LOCAL isWarp TO false.
 
 	LOCAL Vgo TO burn["dV"].
 	LOCAL tImp TO burn["depTime"].
-	LOCAL node TO burn["node"].
 
-	LOCAL isWarp TO true.
+	local curOrb to UpdateOrbitParams().
+	local depR to RatAngle(curOrb, AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, tImp - TIME:SECONDS)).
+	local depV to VatAngle(
+		curOrb,
+		AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, tImp - TIME:SECONDS)
+	) + Vgo.
+	local tgtOrb to BuildOrbitFromVR(depV, depR).
 
 	LOCAL burnTime TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
 	LOCAL depTime TO tImp - burnTime/2.
@@ -45,7 +51,7 @@ FUNCTION ExecBurnNew {
 
 	//Attitude aqq
 	DAP:SetMode(DAP, "Inertial").
-	DAP:SetTarget(DAP, LVLHfromVector(Vgo)).
+	DAP:SetTarget(DAP, "Vector", Vgo).
 
 	WAIT UNTIL (vang(ship:facing:forevector, Vgo) < 2).
 	SET BurnTelemetry:Status TO "Wait Tig".
@@ -93,7 +99,7 @@ FUNCTION ExecBurnNew {
 		}
 
 		//Update attitude
-		DAP:SetTarget(DAP, LVLHfromVector(Vgo)).
+		DAP:SetTarget(DAP, "Vector", Vgo).
 
 		LOCAL Tgo TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
 		SET BurnTelemetry:Telemetry:Vgo TO Vgo.
