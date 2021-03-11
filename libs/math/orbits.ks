@@ -159,7 +159,14 @@ declare function VatAngle {
 	return VelVec2.
 }
 
-declare function TtoR {
+function AngleAtR {
+	parameter orb.
+	parameter r.
+
+	return arccos(((orb:p/r) - 1)/orb:e).
+}
+
+declare function TtoAngle {
 	declare parameter orb.
 	declare parameter depPhi.
 	declare parameter tgtPhi.

@@ -29,12 +29,62 @@ declare function MatrixBuildZero {
 	return m.
 }
 
+function MatrixMultiplyScalar {
+	parameter m.
+	parameter s.
+
+	local i to 0.
+	local j to 0.
+	until (i >= m:length) {
+		until (j >= m[0]:LENGTH) {
+			set m[i][j] to m[i][j]*s.
+			set j to j + 1.
+		}
+		set i to i + 1.
+		set j to 0.
+	}
+	return m.
+}
+
+function Matrix33InverseFast {
+	parameter m.
+
+	local test to (
+		m[0][0]*m[1][1]*m[2][2] -
+		m[0][0]*m[1][2]*m[2][1] -
+		m[0][1]*m[1][0]*m[2][2] +
+		m[0][1]*m[1][2]*m[2][0] +
+		m[0][2]*m[1][0]*m[2][1] -
+		m[0][2]*m[1][1]*m[2][0]
+	).
+
+
+
+	local d to 1/test.
+
+	local m_ to LIST(
+		LIST(
+			m[1][1]*m[2][2] - m[1][2]*m[2][1], m[0][2]*m[2][1] - m[0][1]*m[2][2], m[0][1]*m[1][2] - m[0][2]*m[1][1]
+		),
+		LIST(
+			m[1][2]*m[2][0] - m[1][0]*m[2][2], m[0][0]*m[2][2] - m[0][2]*m[2][0], m[0][2]*m[1][0] - m[0][0]*m[1][2]
+		),
+		LIST(
+			m[1][0]*m[2][1] - m[1][1]*m[2][0], m[0][1]*m[2][0] - m[0][0]*m[2][1], m[0][0]*m[1][1] - m[0][1]*m[1][0]
+		)
+	).
+	return MatrixMultiplyScalar(m_, d).
+}
+
 declare function MatrixFindInverse {
 	declare parameter m.
 	local n to m:length.
 
-	if (MatrixFindDeterminant(m, n) = 0)
-		return 0.
+	//if (MatrixFindDeterminant(m, n) = 0)
+		//return 0.
+	if(m:LENGTH = 3 and m[0]:LENGTH = 3) {
+		return Matrix33InverseFast(m).
+	}
 	return MatrixCalcCofactor(m, n, MatrixFindDeterminant(m, n)).
 }
 
@@ -314,7 +364,6 @@ declare function MatrixConstructTwoMatrixes {
 }
 
 declare function MatrixPrint {
-	clearscreen.
 	declare parameter m.
 	if (m = 0) {
 		print 0.

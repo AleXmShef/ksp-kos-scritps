@@ -1,68 +1,79 @@
 @lazyglobal off.
 clearscreen.
 //-------------------------------------Import Libraries----------------------------------------
-LOCAL storagePath is "1:".
-if not exists(storagePath + "/libs") {
-	createdir(storagePath + "/libs").
-}
-FUNCTION libDl {
-	parameter libs is list().
-
-	for lib in libs {
-		if not exists(storagePath + "/libs/" + lib + ".ks") {
-			copypath("0:/libs/" + lib + ".ks", storagePath + "/libs/").
-		}
-	}
-	for lib in libs {
-		runpath(storagePath + "/libs/" + lib + ".ks").
-	}
-}
-libDl(list("general_functions", "math", "SteeringManager", "misc")).
+Import(list("maneuvers", "propulsion", "DAP", "miscellaneous", "UI/UI_Manager")).
 
 DECLARE GLOBAL Systems to lexicon(
-						"Engine", ship:partstitled("R7 Fregat M")[0]:GETMODULE("ModuleEnginesRF")
-).
-
-DECLARE GLOBAL Specs to lexicon(
-						"EngineThrust", 20.01,
-						"EngineIsp", 333.2
+						"Engine", ship:partstitled("R7 Fregat M")[0]
 ).
 
 DECLARE GLOBAL CurrentMode TO 0.
 DECLARE GLOBAL Thrust TO 0.
-DECLARE GLOBAL FuncList TO list().
-DECLARE GLOBAL LoopFlag TO 0.
+GLOBAL DAP TO GetDAP().
+GLOBAL UI to GetUImanager().
 
-declare function ModeController {
-	declare parameter TargetMode.
-	set CurrentMode to TargetMode.
+FUNCTION UpdateDAP {
+	DAP:Update(DAP).
 }
 
-ModeController("Ascent").
+FUNCTION UpdateUI {
+	UI:Update(UI).
+}
 
-UNTIL (CurrentMode = "Shutdown") {
-	IF (CurrentMode = "debug") {
+LoopManager(0, UpdateDAP@).
+LoopManager(0, UpdateUI@).
 
-		set config:ipu to 1000.
-		SteeringManagerMaster(1).
-		SteeringManagerSetMode().
-		LoopManager(0, SteeringManager@).
-		LOCK THROTTLE TO Thrust + LoopManager().
-		//SteeringManagerSetMode("Vector", SHIP:FACING:FOREVECTOR*-1).
-		wait 1000.
+FUNCTION AcquireControls {
+	lock Throttle to Thrust + LoopManager().
+}
 
-		ModeController("Shutdown").
+FUNCTION ModeController {
+	PARAMETER TargetMode.
+	IF(TargetMode = "400")
+		shutdown.
+	ELSE IF(TargetMode = "401")
+		reboot.
+	ELSE IF(Modes:HASKEY(TargetMode)) {
+		SET CurrentMode TO TargetMode.
+		LOCAL lmj TO LEXICON("Mode", TargetMode).
+		WRITEJSON(lmj, "1:/LastMode.json").
 	}
-	ELSE IF (CurrentMode = "Nothing") {
+}
+
+GLOBAL Modes TO LEXICON(
+	"98", "Nothing",
+	"99", "Bebug",
+	"100", "Boot",
+	"101", "Ascent",
+	"102", "Insertion",
+	"202", "OnOrbit",
+	"203", "PayloadRelease",
+	"301", "Deorbit",
+	"400", "Shutdown",
+	"401", "Reboot"
+).
+
+Import(LIST(
+	"UI/Layouts/BurnLayout"
+)).
+
+GLOBAL UIlayouts TO LEXICON(
+	"BurnLayout", UI_Manager_GetBurnLayout()
+).
+
+ModeController("101").
+
+UNTIL (CurrentMode = "400") {
+	IF (CurrentMode = "98") {
 		WAIT UNTIL CurrentMode <> "Nothing".
 	}
-	ELSE IF (CurrentMode = "Ascent") {
+	ELSE IF (CurrentMode = "101") {
 		//SET CONFIG:IPU TO 10.
 		WAIT UNTIL (not CORE:MESSAGES:EMPTY).
 		IF (not CORE:MESSAGES:EMPTY) {
 			LOCAL Recieved TO CORE:MESSAGES:POP.
 			IF Recieved:content = "Successful ascent" {
-				ModeController("ParkingOrbit").
+				ModeController("102").
 			}
 			ELSE IF Recieved:content = "Load mission" {
 				LOCAL MissionName to CORE:MESSAGES:POP.
@@ -71,18 +82,17 @@ UNTIL (CurrentMode = "Shutdown") {
 			}
 		}
 		ELSE
-			ModeController("ParkingOrbit").
+			ModeController("102").
 	}
-	ELSE IF (CurrentMode = "ParkingOrbit") {
-		set config:ipu to 1000.
-		SteeringManagerMaster(1).
-		SteeringManagerSetMode().
-		LoopManager(0, SteeringManager@).
-		LOCK THROTTLE TO Thrust + LoopManager().
-		ModeController("Decouple").
-		//ModeController("ActiveStage").
-	}
-	ELSE IF (CurrentMode = "Decouple") {
+	ELSE IF (CurrentMode = "102") {
+		set config:ipu to 2000.
+
+		DAP:Init(DAP).
+		UI:Start(UI, false).
+		AcquireControls().
+		UI:AddLayout(UI, UIlayouts:BurnLayout, "12").
+		DAP:Engage(DAP).
+		wait 1.
 		RCS ON.
 		WAIT 2.
 		STAGE.
@@ -90,17 +100,10 @@ UNTIL (CurrentMode = "Shutdown") {
 		WAIT 2.
 		SET SHIP:CONTROL:FORE TO 0.
 		WAIT 1.
-		ModeController("ActiveStage").
+		ModeController("202").
 	}
-	ELSE IF (CurrentMode = "ActiveStage") {
-		if (Mission["Orbit Type"] = "GSO")
-			ModeController("GSO").
-		else if (Mission["Orbit Type"] = "General Orbit")
-			ModeController("RegularTransfer").
-	}
-	ELSE IF (CurrentMode = "RegularTransfer") {
-		LOCAL CurrentOrbit IS OrbitClass:copy.
-		SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
+	ELSE IF (CurrentMode = "202") {
+		LOCAL CurrentOrbit TO UpdateOrbitParams().
 
 		LOCAL TargetOrbit IS OrbitClass:copy.
 		SET TargetOrbit["Ap"] to Mission["Apoapsis"]*1000 + Globals["R"].
@@ -122,18 +125,17 @@ UNTIL (CurrentMode = "Shutdown") {
 		SET DummyTransferOrbit["Pe"] to RatAngle(CurrentOrbit, DummyTransferOrbit["AoP"]):MAG.
 		SET DummyTransferOrbit to BuildOrbit(DummyTransferOrbit).
 
-		LOCAL DummyTransferBurn IS OrbitTransferDemo(CurrentOrbit, DummyTransferOrbit).
+		LOCAL DummyTransferBurn IS OrbitTransfer(CurrentOrbit, DummyTransferOrbit).
 
-		ExecBurnNew(DummyTransferBurn, CurrentOrbit, DummyTransferOrbit, 5).
+		ExecBurnNew(LEXICON("dV", DummyTransferBurn:dV, "Tig", DummyTransferBurn:depTime)).
 
-		SET CurrentOrbit TO UpdateOrbitParams(CurrentOrbit).
-		LOCAL FinalizationBurn IS OrbitTransferDemo(CurrentOrbit, TargetOrbit).
-		ExecBurnNew(FinalizationBurn, CurrentOrbit, TargetOrbit, 5).
-		ModeController("PayloadRelease").
+		SET CurrentOrbit TO UpdateOrbitParams().
+		LOCAL FinalizationBurn IS OrbitTransfer(CurrentOrbit, TargetOrbit).
+		ExecBurnNew(LEXICON("dV", FinalizationBurn:dV, "Tig", FinalizationBurn:depTime)).
+		ModeController("203").
 	}
-	ELSE IF (CurrentMode = "PayloadRelease") {
-		SteeringManagerSetMode().
-		WAIT 15.
+	ELSE IF (CurrentMode = "203") {
+		WAIT 3.
 		RCS OFF.
 		IF (Mission:HASKEY("PayloadProcessor")) {
 			local msg to "Deploy".
@@ -151,9 +153,9 @@ UNTIL (CurrentMode = "Shutdown") {
 		WAIT 10.
 		SET SHIP:CONTROL:FORE TO 0.
 		WAIT 30.
-		ModeController("Deorbit").
+		ModeController("301").
 	}
-	ELSE IF (CurrentMode = "Deorbit") {
+	ELSE IF (CurrentMode = "301") {
 		SteeringManagerSetMode("Vector", SHIP:VELOCITY:ORBIT*-1).
 		WAIT UNTIL (VANG(SHIP:FACING:FOREVECTOR, SHIP:VELOCITY:ORBIT*-1) < 2).
 

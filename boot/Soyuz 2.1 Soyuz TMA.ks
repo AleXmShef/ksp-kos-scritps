@@ -17,9 +17,9 @@ else {
 GLOBAL vehicle IS LIST(
 					LEXICON(
 						"name", "Block A",
-						"massTotal", 132143,
-						"massDry", 39911,
-						"engines", LIST(LEXICON("isp", 320.39, "thrust", 839126), LEXICON("isp", 320.39, "thrust", 37836*4)),
+						"massTotal", 130275,
+						"massDry", 39244,
+						"engines", LIST(LEXICON("isp", 320.39, "thrust", 839100), LEXICON("isp", 320.39, "thrust", 37800*4)),
 						"staging", LEXICON(
 										"jettison", FALSE,
 										"ignition", FALSE
@@ -27,8 +27,8 @@ GLOBAL vehicle IS LIST(
 					),
 					LEXICON(
 						"name", "Block I",
-						"massTotal", 29935,
-						"massDry", 2180,
+						"massTotal", 30282,
+						"massDry", 2527,
 						"engines", LIST(LEXICON("isp", 330.4, "thrust", 298200), LEXICON("isp", 330, "thrust", 6000*4)),
 						"staging", LEXICON(
 										"jettison", TRUE,
@@ -40,12 +40,13 @@ GLOBAL vehicle IS LIST(
 					)
 ).
 GLOBAL sequence IS LIST(
-					LEXICON("time", -3.7, "type", "stage", "message", "RD-107s & RD108 ignition"),
+					LEXICON("time", -2.5, "type", "stage", "message", "RD-107s & RD108 ignition"),
 					LEXICON("time", 0, "type", "stage", "message", "LIFTOFF"),
 					LEXICON("time", 5, "type", "warp", "dur", 110, "message", "Warping through 1st stage"),
-					LEXICON("time", 122, "type", "stage", "message", "Blocks B, V, G, D jettison"),
-					LEXICON("time", 130, "type", "warp", "dur", 150, "message", "Warping through 2nd stage"),
-					LEXICON("time", 140, "type", "jettison", "message", "Fairing jettison", "massLost", 1766),
+					LEXICON("time", 115, "type", "stage", "message", "LES jettison"),
+					LEXICON("time", 123, "type", "stage", "message", "Blocks B, V, G, D jettison"),
+					LEXICON("time", 135, "type", "warp", "dur", 145, "message", "Warping through 2nd stage"),
+					LEXICON("time", 157, "type", "jettison", "message", "Fairing jettison", "massLost", 1400),
 					LEXICON("time", 300, "type", "warp", "dur", 235, "message", "Warping through 3rd stage"),
 					LEXICON("time", 305, "type", "jettison", "message", "RD0110 fairing jettison", "massLost", 4)
 ).

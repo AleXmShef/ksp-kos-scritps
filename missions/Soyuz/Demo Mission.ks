@@ -9,8 +9,8 @@ declare global FregatMission to lexicon (
 ).
 
 declare global SoyuzMission to lexicon (
-					"payload" , 7551,
-					"apoapsis", 210,
-					"periapsis", 205,
+					"payload" , 7165,
+					"apoapsis", 220,
+					"periapsis", 210,
 					"inclination", 51.6
 ).

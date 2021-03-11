@@ -1,5 +1,5 @@
 @lazyGLOBAL off.
-Import(LIST("miscellaneous")).
+Import(LIST("miscellaneous", "orbits")).
 
 GLOBAL BurnTelemetryClass TO LEXICON(
 	"BurnTarget", LEXICON(
@@ -11,23 +11,23 @@ GLOBAL BurnTelemetryClass TO LEXICON(
 		"Vgo", v(0, 0, 0),
 		"ResultOrbit", OrbitClass:COPY
 	),
-	"Gimals", LEXICON(
+	"Gimbals", LEXICON(
 		"Pitch", 0,
 		"Yaw", 0,
 		"Enabled", true
-	)
+	),
 	"Status", "Inactive"
-)
+).
 
 GLOBAL BurnTelemetry TO BurnTelemetryClass:COPY.
 
 FUNCTION ExecBurnNew {
 	PARAMETER burn.
 	PARAMETER gimbal TO true.
-	LOCAL isWarp TO false.
+	PARAMETER warp TO true.
 
 	LOCAL Vgo TO burn["dV"].
-	LOCAL tImp TO burn["depTime"].
+	LOCAL tImp TO burn["Tig"].
 
 	local curOrb to UpdateOrbitParams().
 	local depR to RatAngle(curOrb, AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, tImp - TIME:SECONDS)).
@@ -35,29 +35,34 @@ FUNCTION ExecBurnNew {
 		curOrb,
 		AngleAtT(curOrb, SHIP:ORBIT:TRUEANOMALY, tImp - TIME:SECONDS)
 	) + Vgo.
-	local tgtOrb to BuildOrbitFromVR(depV, depR).
+	local tgtOrbit to BuildOrbitFromVR(depV, depR).
 
-	LOCAL burnTime TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
+	LOCAL burnTime TO calcBurnTime(Vgo:mag, Systems["Engine"]:POSSIBLETHRUSTAT(0), Systems["Engine"]:VISP).
 	LOCAL depTime TO tImp - burnTime/2.
-
-	if(burnTime < 30)
-		SET isWarp TO false.
 
 	//UI
 	SET BurnTelemetry:BurnTarget:Tig TO depTime.
+	SET BurnTelemetry:BurnTarget:dV TO Vgo.
 	SET BurnTelemetry:Telemetry:Tgo TO burnTime.
 	SET BurnTelemetry:Telemetry:Vgo TO Vgo.
 	SET BurnTelemetry:Status TO "Attitude".
 
 	//Attitude aqq
 	DAP:SetMode(DAP, "Inertial").
+	wait 1.
 	DAP:SetTarget(DAP, "Vector", Vgo).
 
 	WAIT UNTIL (vang(ship:facing:forevector, Vgo) < 2).
 	SET BurnTelemetry:Status TO "Wait Tig".
 
 	//Warp
-	WAIT UNTIL (depTime - TIME:SECONDS < ullageDuration).
+	if(warp) {
+		KUNIVERSE:TIMEWARP:WARPTO(depTime - 5).
+	}
+	WAIT UNTIL (depTime - TIME:SECONDS < 3).
+
+	if(burnTime < 30)
+		SET warp TO false.
 
 	//Ullage
 	SET BurnTelemetry["Status"] TO "Ullage".
@@ -67,7 +72,7 @@ FUNCTION ExecBurnNew {
 	rcs off.
 
 	//Warp
-	if(isWarp = true) {
+	if(warp = true) {
 		SET kuniverse:timewarp:mode TO "PHYSICS".
 		SET kuniverse:timewarp:warp TO 2.
 	}
@@ -77,6 +82,10 @@ FUNCTION ExecBurnNew {
 	LOCAL cutoff TO false.
 	LOCAL curTime TO TIME:SECONDS.
 	LOCAL prevTime TO 0.
+	if(warp) {
+		SET kuniverse:timewarp:mode TO "PHYSICS".
+		SET kuniverse:timewarp:warp TO 2.
+	}
 	LOCAL warpFlag TO true.
 	UNTIL (cutoff = true) {
 		//Update time
@@ -84,7 +93,7 @@ FUNCTION ExecBurnNew {
 		SET curTime TO TIME:SECONDS.
 
 		//Update LOCAL Vgo
-		SET Vgo TO Vgo - ship:facing:forevector:normalized * ((Specs["EngineThrust"]/SHIP:MASS) * (curTime - prevTime)).
+		SET Vgo TO Vgo - ship:facing:forevector:normalized * ((Systems["Engine"]:POSSIBLETHRUSTAT(0)/SHIP:MASS) * (curTime - prevTime)).
 
 		//Try TO recalculate Vgo
 		LOCAL curOrbit TO UpdateOrbitParams().
@@ -101,7 +110,7 @@ FUNCTION ExecBurnNew {
 		//Update attitude
 		DAP:SetTarget(DAP, "Vector", Vgo).
 
-		LOCAL Tgo TO calcBurnTime(Vgo:mag, Specs["EngineThrust"], Specs["EngineIsp"]).
+		LOCAL Tgo TO calcBurnTime(Vgo:mag, Systems["Engine"]:POSSIBLETHRUSTAT(0), Systems["Engine"]:VISP).
 		SET BurnTelemetry:Telemetry:Vgo TO Vgo.
 		SET BurnTelemetry:Telemetry:Tgo TO Tgo.
 
@@ -124,7 +133,7 @@ FUNCTION ExecBurnNew {
 
 	rcs on.
 	DAP:SetMode(DAP, "Inertial").
-	WAIT 5.
+	WAIT 1.
 	set BurnTelemetry to BurnTelemetryClass:COPY.
 	WAIT 1.
 }

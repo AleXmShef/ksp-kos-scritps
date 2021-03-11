@@ -37,7 +37,6 @@ declare function RendezvousTransfer {
 	declare parameter RBarDistance.
 	declare parameter chaserTrueAnomaly.
 	declare parameter targetTrueAnomaly.
-	declare parameter lambertSolverFlag TO TRUE.
 
 	LOCAL tNow IS TIME:SECONDS.
 
@@ -63,7 +62,7 @@ declare function RendezvousTransfer {
 	LOCAL averageRelativeAngularVelocity IS chaserAverageAngularVelocity - targetAverageAngularVelocity.
 
 	LOCAL averageHohmannTransferOrbit IS chaserOrbit:COPY.
-	SET averageHohmannTransferOrbit["Ap"] TO targetOrbit["Ap"] - RBarDistance*1000.
+	SET averageHohmannTransferOrbit["Ap"] TO targetOrbit["Ap"] - RBarDistance.
 	SET averageHohmannTransferOrbit TO BuildOrbit(averageHohmannTransferOrbit).
 
 	LOCAL additive is 10.
@@ -75,122 +74,68 @@ declare function RendezvousTransfer {
 	LOCAL _burnCoastTime IS 0.
 	LOCAL angle IS 180.
 
-	IF(lambertSolverFlag) {
-		UNTIL (done = TRUE) {
+	UNTIL (done = TRUE) {
 
-			SET burnCoastTime TO burnCoastTime + additive.
+		SET burnCoastTime TO burnCoastTime + additive.
 
-			//SET burnCoastTime TO averageHohmannTransferOrbit["T"]/2.
+		//SET burnCoastTime TO averageHohmannTransferOrbit["T"]/2.
 
-			LOCAL idk IS 180/(averageHohmannTransferOrbit["T"]/2).
+		LOCAL idk IS 180/(averageHohmannTransferOrbit["T"]/2).
 
-			LOCAL chaserHohmannAverageAngularVelocity IS idk.
-			//LOCAL chaserHohmannAverageAngularVelocity IS (185)/(burnCoastTime).
-
-			LOCAL averagePostBurnRelativeAngularVelocity IS chaserHohmannAverageAngularVelocity - targetAverageAngularVelocity.
-
-			LOCAL burnCoastRelativeAngle IS averagePostBurnRelativeAngularVelocity*burnCoastTime.
-
-			LOCAL phasingAngleAfterBurn IS ((YBarDistance*1000 * 180) / (CONSTANT:PI * targetOrbit["Ap"])).
-
-			//LOCAL phasingAngleAfterBurn IS 0.
-
-			LOCAL burnPhasingAngle IS (phasingAngleAfterBurn + burnCoastRelativeAngle).
-
-			LOCAL coastTimeBeforeBurn IS ((currentPhasingAngle - burnPhasingAngle) / averageRelativeAngularVelocity).
-
-			LOCAL r1 IS RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserTrueAnomaly, coastTimeBeforeBurn)).
-			LOCAL _r2 IS RatAngle(targetOrbit, AngleAtT(targetOrbit, targetTrueAnomaly, coastTimeBeforeBurn + burnCoastTime)).
-			LOCAL r2 IS Vrot(_r2, ANNorm(targetOrbit["LAN"], targetOrbit["Inc"]):UPVECTOR, phasingAngleAfterBurn).
-			set r2:MAG TO r2:MAG - RBarDistance*1000.
-
-			set angle to vang(r1, r2).
-
-
-			LOCAL targetV IS lambert2(r1, r2, burnCoastTime, Globals["mu"])["v0"].
-
-			LOCAL _node IS nodeFromV(chaserOrbit, r1, VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserTrueAnomaly, coastTimeBeforeBurn)), targetV).
-
-			clearscreen.
-			PRINT "previous deltaV: " + node["dV"] at (0, 0).
-			PRINT "deltaV: " + _node["dV"] at (0,1).
-			print "additive: " + additive at (0,2).
-			if(_node["dV"] > node["dV"]) {
-				LOCAL _diff IS (_node["dV"] - abs(additive)*5) - node["dV"].
-				IF (_diff > diff) {
-					SET additive TO additive * -0.5.
-					SET diff TO 1000000.
-				}
-				ELSE
-					SET diff TO _diff.
-			}
-			IF(_node["dV"] < node["dV"]) {
-				SET node TO _node.
-				SET _coastTimeBeforeBurn TO coastTimeBeforeBurn.
-				SET _burnCoastTime TO burnCoastTime.
-				SET diff TO 10000000.
-			}
-			IF (node["dV"] < 150)
-				IF (additive > 10)
-					SET additive TO 5.
-			PRINT "min dV: " + node["dV"] at (0,3).
-			PRINT "diff: " + (averageHohmannTransferOrbit["T"]/2 - _burnCoastTime) at (0,4).
-			//WAIT UNTIL (TERMINAL:INPUT:HASCHAR).
-			//TERMINAL:INPUT:CLEAR().
-			//SET done TO TRUE.
-			if(abs(additive) < 0.1)
-				SET done TO TRUE.
-		}
-	}
-	ELSE {
-		SET burnCoastTime TO averageHohmannTransferOrbit["T"]/2.
-
-		LOCAL chaserHohmannAverageAngularVelocity IS 180/(burnCoastTime).
+		LOCAL chaserHohmannAverageAngularVelocity IS idk.
+		//LOCAL chaserHohmannAverageAngularVelocity IS (185)/(burnCoastTime).
 
 		LOCAL averagePostBurnRelativeAngularVelocity IS chaserHohmannAverageAngularVelocity - targetAverageAngularVelocity.
 
 		LOCAL burnCoastRelativeAngle IS averagePostBurnRelativeAngularVelocity*burnCoastTime.
 
-		LOCAL phasingAngleAfterBurn IS ((YBarDistance*1000 * 180) / (CONSTANT:PI * targetOrbit["Ap"])).
+		LOCAL phasingAngleAfterBurn IS ((YBarDistance * 180) / (CONSTANT:PI * targetOrbit["Ap"])).
+
+		//LOCAL phasingAngleAfterBurn IS 0.
 
 		LOCAL burnPhasingAngle IS (phasingAngleAfterBurn + burnCoastRelativeAngle).
 
 		LOCAL coastTimeBeforeBurn IS ((currentPhasingAngle - burnPhasingAngle) / averageRelativeAngularVelocity).
-		PRINT "TEST: " + (1650*averageRelativeAngularVelocity).
 
 		LOCAL r1 IS RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserTrueAnomaly, coastTimeBeforeBurn)).
 		LOCAL _r2 IS RatAngle(targetOrbit, AngleAtT(targetOrbit, targetTrueAnomaly, coastTimeBeforeBurn + burnCoastTime)).
-		LOCAL r2 IS Vrot(_r2, ANNorm(TargetOrbit["LAN"], TargetOrbit["Inc"]):UPVECTOR, phasingAngleAfterBurn).
-		set r2:MAG TO r2:MAG - RBarDistance*1000.
+		LOCAL r2 IS Vrot(_r2, ANNorm(targetOrbit["LAN"], targetOrbit["Inc"]):UPVECTOR, phasingAngleAfterBurn).
+		set r2:MAG TO r2:MAG - RBarDistance.
 
-		LOCAL hohmannTransferOrbit IS OrbitClass:COPY.
-		SET hohmannTransferOrbit["Pe"] TO r1:MAG.
-		SET hohmannTransferOrbit["Ap"] TO r2:MAG.
-		LOCAL hohAoP IS AngleAtT(chaserOrbit, chaserTrueAnomaly, coastTimeBeforeBurn) + chaserOrbit["AoP"].
-		IF (hohAoP > 360) {
-			UNTIL (hohAoP < 360)
-				SET hohAoP TO hohAoP -360.
+		set angle to vang(r1, r2).
+
+
+		LOCAL targetV IS lambert2(r1, r2, burnCoastTime, Globals["mu"])["v0"].
+
+		LOCAL _node IS nodeFromV(chaserOrbit, r1, VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserTrueAnomaly, coastTimeBeforeBurn)), targetV).
+
+		if(_node["dV"] > node["dV"]) {
+			LOCAL _diff IS (_node["dV"] - abs(additive)*5) - node["dV"].
+			IF (_diff > diff) {
+				SET additive TO additive * -0.5.
+				SET diff TO 1000000.
+			}
+			ELSE
+				SET diff TO _diff.
 		}
-		SET hohmannTransferOrbit["AoP"] TO hohAoP + 0.01.
-		SET hohmannTransferOrbit["LAN"] TO chaserOrbit["LAN"].
-		SET hohmannTransferOrbit["Inc"] TO chaserOrbit["Inc"].
-		SET hohmannTransferOrbit TO BuildOrbit(hohmannTransferOrbit).
-
-		PRINT "diff: " + (hohmannTransferOrbit["T"]/2 - averageHohmannTransferOrbit["T"]/2).
-
-		LOCAL targetV IS VatAngle(hohmannTransferOrbit, 359.9).
-		SET node TO nodeFromV(chaserOrbit, r1, VatAngle(chaserOrbit, chaserTrueAnomaly + coastTimeBeforeBurn*chaserAverageAngularVelocity), targetV).
-		//SET node TO OrbitTransfer(chaserOrbit, hohmannTransferOrbit).
-		//PRINT "deltaV: " + node["dV"] at (0,1).
-		SET _coastTimeBeforeBurn TO coastTimeBeforeBurn.
-		SET _burnCoastTime TO burnCoastTime.
+		IF(_node["dV"] < node["dV"]) {
+			SET node TO _node.
+			SET _coastTimeBeforeBurn TO coastTimeBeforeBurn.
+			SET _burnCoastTime TO burnCoastTime.
+			SET diff TO 10000000.
+		}
+		IF (node["dV"] < 150)
+			IF (additive > 10)
+				SET additive TO 5.
+		if(abs(additive) < 0.1)
+			SET done TO TRUE.
 	}
 	IF(_coastTimeBeforeBurn > 7200) {
-		LOCAL tooFar IS LEXICON("node", "none", "warpTime", _coastTimeBeforeBurn - 1000).
+		LOCAL tooFar IS LEXICON("node", "none", "warpTime", _coastTimeBeforeBurn - 1000 + TIME:SECONDS).
 		RETURN tooFar.
 	}
 	ELSE {
-		LOCAL burn IS LEXICON("node", node["node"], "dV", node["dVvec"], "depTime", _coastTimeBeforeBurn, "burnCoastTime", _burnCoastTime, "arrivalTime", TIME:SECONDS + _coastTimeBeforeBurn + _burnCoastTime).
+		LOCAL burn IS LEXICON("node", node["node"], "dV", node["dVvec"], "depTime", _coastTimeBeforeBurn + TIME:SECONDS, "burnCoastTime", _burnCoastTime, "arrivalTime", TIME:SECONDS + _coastTimeBeforeBurn + _burnCoastTime).
 		SET burn["node"]:ETA TO _coastTimeBeforeBurn.
 		RETURN burn.
 	}
@@ -480,8 +425,8 @@ declare function OrbitTransfer {
 	local tangentPlaneVec to dV - radVec*(dV:mag*cos(vang(dV, radVec))).
 	local normV to tangentPlaneVec:mag*cos(vang(normVec, tangentPlaneVec)).
 
-	local mnode to NODE(time:seconds + TtoR(DepartureOrbit, ship:orbit:trueanomaly, phi), radV, normV, progV).
-	return lexicon("node", mnode, "dV", dV, "tgtV", tgtV:mag, "tgtVvec", tgtV, "depTime", time:seconds + TtoR(DepartureOrbit, ship:orbit:trueanomaly, phi), "result", 1).
+	local mnode to NODE(time:seconds + TtoAngle(DepartureOrbit, ship:orbit:trueanomaly, phi), radV, normV, progV).
+	return lexicon("node", mnode, "dV", dV, "tgtV", tgtV:mag, "tgtVvec", tgtV, "depTime", time:seconds + TtoAngle(DepartureOrbit, ship:orbit:trueanomaly, phi), "result", 1).
 }
 
 declare function nodeFromV {

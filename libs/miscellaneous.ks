@@ -54,14 +54,14 @@ declare function EngineController {
 	declare parameter engine.
 	declare parameter action to -1.
 	if (action = 0) {
-		engine:DOEVENT("shutdown engine").
+		engine:shutdown().
 	}
 	else if (action = 1) {
-		engine:DOEVENT("activate engine").
+		engine:activate().
 	}
 	else {
-		local status to engine:GETFIELD("Propellant").
-		if(status:CONTAINS("VERY STABLE"))
+		local status to engine:fuelstability.
+		if(status = 1)
 			return true.
 		else
 			return false.
@@ -80,6 +80,7 @@ declare function GetConnectedParts {
             if (part:NAME = name)
                 return part.
         }
+		return 0.
     }
     return parts.
 }

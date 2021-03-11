@@ -10,11 +10,12 @@ declare function GetUImanager {
 		"Start", UI_Manager_Start@,
 		"Stop", UI_Manager_Stop@,
 		"Update", UI_Manager_BigUpdate@,
-		"Layouts", LIST(),
+		"Layouts", LEXICON(),
 		"Data", LEXICON(
 			"ActiveLayout", -1,
 			"Iterations", 0,
-			"Tickrate", 0
+			"lastTime", 0,
+			"Tickrate", 0.1
 		),
 		"Keyboard", 0,
 		"Command", LEXICON(
@@ -37,38 +38,14 @@ declare function UI_Manager_RemoveLayout {
 
 declare function UI_Manager_AddLayout {
 	declare parameter self.
-	declare parameter key.
 	declare parameter layout.
+	declare parameter key.
 
-	set self:Layouts[key] to UI_Manager_PendingAdditionLayout.
+	local layouts to self:Layouts.
+	set layouts[key] to layout.
+	set self:Layouts to layouts.
 	if(self:Layouts:LENGTH = 1)
 		UI_Manager_Change_ActiveLayout(self, key).
-}
-
-declare function UI_Manager_Update {
-	declare parameter self.
-
-	if(DEFINED(ShipName))
-		pc(ShipName, 1, false, 0).
-	else
-		pc(SHIP:NAME, 1, false, 0).
-	local met TO ParseTime(MISSIONTIME).
-	pr(met:d, 15, 3, false, 0).
-	pr(met:h, 19, 3, false, 0).
-	pr(met:m, 23, 3, false, 0).
-	pr(met:s, 27, 3, false, 0).
-
-	pl(self:Command:str, 2, 24, false, 0).
-
-	if(self:Data:ActiveLayout >= 0)
-		self:Layouts[self:Data:ActiveLayout]:Update(self:Layouts[self:Data:ActiveLayout]).
-
-	for key in self:Layouts[self:Data:ActiveLayout]:Items:KEYS {
-		local item is self:Layouts[self:Data:ActiveLayout]:Items[key].
-		if (item:isActive) {
-			pl("*", item:posX, item:posY).
-		}
-	}
 }
 
 declare function UI_Manager_ExecCommand {
@@ -80,33 +57,33 @@ declare function UI_Manager_ExecCommand {
 	}
 
 	if(self:Command:OP = "ITEM") {
-		local itemNumber to self:Command:ARG:TONUMBER(-1).
+		local itemNumber to self:Command:ARG.
 		local itemArg to "none".
 		local separator to self:Command:ARG:FIND("+").
 		if(separator > 0) {
 			local number_arg to self:Command:ARG:SPLIT("+").
-			set itemNumber to number_arg[0]:TONUMBER(-1).
-			set itemArg to number_arg[1]:TONUMBER(-1).
+			set itemNumber to number_arg[0].
+			set itemArg to number_arg[1].
 		}
-		for key in self:Layouts[self:Data:ActiveLayout]:Items:KEYS {
-			local item to self:Layouts[self:Data:ActiveLayout]:Items[key].
-			if(item:Number = itemNumber) {
-				local result to item:Action(self:Layouts[self:Data:ActiveLayout], itemArg).
-				if(result <> "") {
-					set self:Command:stage to 4.
-					set self:Command:str to result.
-				}
+		if(self:Layouts[self:Data:ActiveLayout]:Items:HASKEY(itemNumber)) {
+			local item to self:Layouts[self:Data:ActiveLayout]:Items[itemNumber].
+			local result to item:Action(self:Layouts[self:Data:ActiveLayout], itemArg).
+			if(result <> "") {
+				set self:Command:stage to -1.
+				set self:Command:str to result.
+				return 0.
 			}
 		}
 	}
 	else if(self:Command:OP = "SPEC") {
 		local spec to self:Command:ARG.
-		UI_Manager_Change_ActiveLayout(spec).
+		UI_Manager_Change_ActiveLayout(self, spec).
 	}
 	else if(self:Command:OP = "OPS") {
 		local mode to self:Command:ARG.
 		ModeController(mode).
 	}
+	return 1.
 }
 
 declare function UI_Manager_KeyboardCallback {
@@ -139,14 +116,16 @@ declare function UI_Manager_KeyboardCallback {
 			set self:Command:stage to 2.
 			set self:Command:CMD to button.
 			set self:Command:str to self:Command:str + " " + button.
-			UI_Manager_ExecCommand(self).
-			set self:Command to LEXICON(
-				"stage", 0,
-				"OP", "",
-				"ARG", "",
-				"CMD", "",
-				"str", ""
-			).
+			local res to UI_Manager_ExecCommand(self).
+			if(res = 1) {
+				set self:Command to LEXICON(
+					"stage", 0,
+					"OP", "",
+					"ARG", "",
+					"CMD", "",
+					"str", ""
+				).
+			}
 		}
 		else {
 			set self:Command:stage to -1.
@@ -162,13 +141,15 @@ declare function UI_Manager_Stop {
 
 declare function UI_Manager_BigUpdate {
 	declare parameter self.
-
-	if(self:Data:Iterations > 10) {
-		UI_Manager_Refresh(self).
-		set self:Data:Iterations to 0.
+	if(self:Data:lastTime + self:Data:Tickrate < TIME:SECONDS) {
+		if(self:Data:Iterations > 10) {
+			UI_Manager_Refresh(self).
+			set self:Data:Iterations to 0.
+		}
+		UI_Manager_Update(self).
+		set self:Data:Iterations to self:Data:Iterations + 1.
+		set self:Data:lastTime to TIME:SECONDS.
 	}
-	UI_Manager_Update(self).
-	set self:Data:Iterations to self:Data:Iterations + 1.
 }
 
 declare function UI_Manager_Start {
@@ -208,7 +189,6 @@ declare function UI_Manager_Change_ActiveLayout {
 
 declare function UI_Manager_Refresh {
 	declare parameter self.
-	clearscreen.
 	UI_Manager_Init().
 	if(self:Data:ActiveLayout >= 0)
 		self:Layouts[self:Data:ActiveLayout]:Init(self:Layouts[self:Data:ActiveLayout]).
@@ -235,7 +215,7 @@ declare function UI_Manager_Refresh {
 }
 
 declare function UI_Manager_Init {
-
+	clearscreen.
 	print "/   /   .--------------------------------------------------.".	//0
 	print ".-------*                                                  |".	//1
 	print "|----------------------------------------------------------|".	//2
@@ -259,4 +239,33 @@ declare function UI_Manager_Init {
 declare function UI_Manager_Print_CommandLine {
 	print "|----------------------------------------------------------|".
 	print "|                                                          |".
+}
+
+declare function UI_Manager_Update {
+	declare parameter self.
+
+	if(DEFINED(ShipName))
+		pc(ShipName, 1, false, 0).
+	else
+		pc(SHIP:NAME, 1, false, 0).
+	local met TO ParseTime(MISSIONTIME).
+	pr(met:d, 15, 3, false, 0).
+	pr(met:h, 19, 3, false, 0).
+	pr(met:m, 23, 3, false, 0).
+	pr(met:s, 27, 3, false, 0).
+
+	pl(CurrentMode, 1, 0, false, 0).
+	pl(self:Data:ActiveLayout, 5, 0, false, 0).
+
+	pl(self:Command:str, 2, 24, false, 0).
+
+	if(self:Data:ActiveLayout >= 0)
+		self:Layouts[self:Data:ActiveLayout]:Update(self:Layouts[self:Data:ActiveLayout]).
+
+	// for key in self:Layouts[self:Data:ActiveLayout]:Items:KEYS {
+	// 	local item is self:Layouts[self:Data:ActiveLayout]:Items[key].
+	// 	if (item:HASKEY("isActive") and item:isActive) {
+	// 		pl("*", item:posX, item:posY).
+	// 	}
+	// }
 }

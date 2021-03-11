@@ -10,7 +10,8 @@ function GetDAP {
 		"Update", DAP_Update@,
 		"SetMode", DAP_SetMode@,
 		"SetTarget", DAP_SetTarget@,
-		"DAP_SetTarget", DAP_SetTarget@,
+		"SetAxis", DAP_SetAxis@,
+
 
 		//fields
 		"Engaged", false,
@@ -103,8 +104,8 @@ function DAP_SetTarget {
 	parameter self.
 	parameter type.
 	parameter tgt.
-	//wait until (self:Internal:AlreadyInUpdate = false).
-	//set self:Internal:AlreadyInUpdate to true.
+	wait until (self:Internal:AlreadyInUpdate = false).
+	set self["Internal"]["AlreadyInUpdate"] to true.
 	if(type = "Attitude") {
 		set self:Mode:Target to DenormalizeAngles(tgt).
 	}
@@ -123,13 +124,15 @@ function DAP_SetTarget {
 		local tgtDir to LOOKDIRUP(vec_fwd, vec_up).
 		set self:Mode:Target to tgtDir.
 	}
-	//set self:Internal:AlreadyInUpdate to false.
+	set self["Internal"]["AlreadyInUpdate"] to false.
 }
 
 function DAP_SetMode {
 	declare parameter self.
 	declare parameter mode to "Inertial".
 	declare parameter arg to 0.
+	wait until (self:Internal:AlreadyInUpdate = false).
+	set self["Internal"]["AlreadyInUpdate"] to true.
 	if(mode = "Inertial") {
 		set self["Mode"] to LEXICON(
 			"Mode", "Inertial"
@@ -155,6 +158,7 @@ function DAP_SetMode {
 		).
 		set self:ManualOverride to true.
 	}
+	set self["Internal"]["AlreadyInUpdate"] to false.
 }
 
 function DAP_SetThrustOffset {
@@ -162,41 +166,51 @@ function DAP_SetThrustOffset {
 	set self["ThrustOffset"] to offset.
 }
 
+function DAP_GetBasis {
+	parameter axis to "+X".
+	if(axis = "+X") {
+		return LEXICON("z", ship:facing:forevector, "x", ship:facing:starvector, "y", ship:facing:upvector).
+	}
+	else if(axis = "+Y") {
+		return LEXICON("z", ship:facing:upvector, "x", ship:facing:starvector, "y", -ship:facing:forevector).
+	}
+	else {
+		return LEXICON("z", ship:facing:forevector, "x", ship:facing:starvector, "y", ship:facing:upvector).
+	}
+}
+
+function DAP_SetAxis {
+	parameter self.
+	parameter axis to "+X".
+
+	set self:ReferenceAxis to axis.
+}
+
 function DAP_UpdateAttitude {
 	parameter self.
 
-	local shipBasis to LEXICON("z", ship:facing:forevector, "x", ship:facing:starvector, "y", ship:facing:upvector).
+	local shipBasis to DAP_GetBasis(self:ReferenceAxis).
 
 
 	if(not self:ManualOverride) {
 		local raw_fore to 0.
 		local raw_up to 0.
 
-		clearscreen.
-		print self:Mode:Target at (0, 1).
-
 		if(self:Mode:Mode = "Inertial") {
 			set raw_fore to fromIRF(self:Mode:Target:forevector).
 			set raw_up to fromIRF(self:Mode:Target:upvector).
 		}
 		else if(self:Mode:Mode = "LVLH") {
-			local lvlh to getLVLHfromR_DAP(UpdateOrbitParams(), -SHIP:BODY:POSITION).
+			local lvlh to getLVLHfromR_DAP(UpdateOrbitParams(), -SHIP:BODY:POSITION:NORMALIZED).
 			set raw_fore to VCMT(lvlh:Inverse, self:Mode:Target:forevector).
 			set raw_up to -SHIP:BODY:POSITION:NORMALIZED.
 		}
-
-		vecdraw(v(0, 0, 0), raw_fore*10, rgb(0, 0, 1), "tgt_fore", 1.0, true, 0.2, true, true).
-		vecdraw(v(0, 0, 0), raw_up*10, rgb(0, 0, 1), "tgt_up", 1.0, true, 0.2, true, true).
 
 		local pitch to 90 - VANG(shipBasis:y, raw_fore - shipBasis:x * cos(vang(raw_fore, shipBasis:x))).
 		local yaw to 90 - VANG(shipBasis:x, raw_fore - shipBasis:y * cos(vang(raw_fore, shipBasis:y))).
 		local roll to 0.
 
-		print pitch at (0, 3).
-		print yaw at (0, 4).
-		print roll at (0, 5).
-
-		if(vang(raw_fore, shipBasis:z) < 45) {
+		if(vang(raw_fore, shipBasis:z) < 45 and self:Mode:Mode <> "Inertial") {
 			set roll to 90 - VANG(shipBasis:x, raw_up - shipBasis:z * cos(vang(raw_up, shipBasis:z))).
 		}
 
@@ -213,15 +227,13 @@ function DAP_UpdateAttitude {
 		set self["Yaw"]["AngError"]  to yawAngErr.
 	}
 
-	set self["Yaw"]["AngVelocity"] to VDOT(shipBasis:y, SHIP:ANGULARVEL)*180/CONSTANT:PI.
-	set self["Pitch"]["AngVelocity"] to -VDOT(shipBasis:x, SHIP:ANGULARVEL)*180/CONSTANT:PI.
-	set self["Roll"]["AngVelocity"] to -VDOT(shipBasis:z, SHIP:ANGULARVEL)*180/CONSTANT:PI.
+	set self["Yaw"]["AngVelocity"] to VDOT(ship:facing:upvector, SHIP:ANGULARVEL)*180/CONSTANT:PI.
+	set self["Pitch"]["AngVelocity"] to -VDOT(ship:facing:starvector, SHIP:ANGULARVEL)*180/CONSTANT:PI.
+	set self["Roll"]["AngVelocity"] to -VDOT(ship:facing:forevector, SHIP:ANGULARVEL)*180/CONSTANT:PI.
 }
 
-local prevTime to 0.
 function DAP_Update {
 	parameter self.
-	set prevTime to TIME:SECONDS.
 	if (self:Engaged AND self:Internal:AlreadyInUpdate = false) {
 		set self:Internal:AlreadyInUpdate to true.
 		if(SHIP:CONTROL:PILOTNEUTRAL) {
@@ -306,5 +318,4 @@ function DAP_Update {
 
 		set self:Internal:AlreadyInUpdate to false.
 	}
-	print TIME:SECONDS - prevTime at (0, 0).
 }
