@@ -28,6 +28,14 @@ declare function calcDeltaVfromBurnTime {
 	return DeltaV.
 }
 
+FUNCTION GSOPlanner {
+	parameter long.
+
+	local curOrb to UpdateOrbitParams().
+
+	
+}
+
 declare function RendezvousTransfer {
 	CLEARVECDRAWS().
 	terminal:input:clear().
@@ -149,20 +157,24 @@ declare function CWequationFutureFromCurrent {
 	DECLARE PARAMETER finalTime.
 
 	//Compute craft's positions and velocities
+
 	LOCAL chaserOrbit TO UpdateOrbitParams(chaserShip:ORBIT).
 	LOCAL targetOrbit TO UpdateOrbitParams(targetShip:ORBIT).
 
-	LOCAL chaserPosition TO RatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
-	LOCAL chaserVelocity TO VatAngle(chaserOrbit, AngleAtT(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL bodyPos to chaserShip:BODY:POSITION.
 
-	LOCAL targetPosition TO RatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
-	LOCAL targetVelocity TO VatAngle(targetOrbit, AngleAtT(targetOrbit, targetShip:ORBIT:TRUEANOMALY, initialTime)).
+	LOCAL chaserPosition TO chaserShip:ORBIT:POSITION - bodyPos.
+	LOCAL chaserVelocity TO chaserShip:VELOCITY:ORBIT.
+
+	LOCAL targetPosition TO targetShip:ORBIT:POSITION - bodyPos.
+	LOCAL targetVelocity TO targetShip:VELOCITY:ORBIT.
+
 
 	LOCAL n IS SQRT((Globals["mu"]) / (TargetOrbit["a"] * TargetOrbit["a"] * TargetOrbit["a"])).
 
 	//Convert ECI to LVLH
 	//Create target LVLH basis
-	LOCAL LVLH IS LVLHfromR(targetOrbit, targetPosition).
+	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.
@@ -171,6 +183,7 @@ declare function CWequationFutureFromCurrent {
 	//Compute relative velocity vectors
 	LOCAL relativeVelocity IS chaserVelocity - targetVelocity - VCRS(n*LVLH:basis:z, relativePosition).
 	LOCAL LVLHrelativeVelocity IS VCMT(LVLH:Transform, relativeVelocity).
+
 
 	LOCAL LVLHrelativePositionFinal TO V(0,0,0).
 
@@ -191,8 +204,8 @@ declare function CWequationFutureFromCurrent {
 													).
 
 		SET LVLHrelativePositionFinal TO _CWfindRatT_(relativePositionMatrix, relativeVelocityMatrix, n, finalTime - initialTime).
-	}
 
+	}
 	RETURN LEXICON(
 		"LVLHrelativePosition", LVLHrelativePosition,
 		"LVLHrelativeVelocity", LVLHrelativeVelocity,
@@ -227,13 +240,18 @@ declare function CWequationCurrentVelFromFuturePos {
 
 	SET targetPosition TO targetShip:ORBIT:POSITION - bodyPos.
 	SET targetVelocity TO targetShip:VELOCITY:ORBIT.
-	//}
+
+	// SET chaserPosition TO RatAngle(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY).
+	// SET targetPosition TO RatAngle(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY).
+	//
+	// SET chaserVelocity TO VatAngle(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY).
+	// SET targetVelocity TO VatAngle(chaserOrbit, chaserShip:ORBIT:TRUEANOMALY).
 
 	LOCAL n IS SQRT(Globals["mu"] / (TargetOrbit["a"] * TargetOrbit["a"] * TargetOrbit["a"])).
 
 	//Convert ECI to LVLH
 	//Create target LVLH basis
-	LOCAL LVLH IS LVLHfromR(targetOrbit, targetPosition).
+	LOCAL LVLH IS getLVLHfromR(targetOrbit, targetPosition).
 
 	//Compute relative position vectors
 	LOCAL relativePosition IS chaserPosition - targetPosition.

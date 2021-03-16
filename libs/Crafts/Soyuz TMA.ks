@@ -60,6 +60,12 @@ FUNCTION ExecTask {
 	if(task:Type = "Burn") {
 		ExecBurnNew(LEXICON("Tig", task:Tig, "dV", task:dV)).
 	}
+	else if(task:Type = "CW_Burn") {
+		RendezvousManager(task:Ops).
+	}
+	else if(task:Type = "killRelVel") {
+		KillRelVel(SHIP, task:targetShip).
+	}
 }
 
 GLOBAL CurrentMode TO 0.
@@ -91,7 +97,9 @@ Import(LIST(
 	"UI/Layouts/OrbitLayout",
 	//"UI/Layouts/BootLayout",
 	"UI/Layouts/BurnLayout",
-	"UI/Layouts/RendezvousLayout"
+	"UI/Layouts/RendezvousLayout",
+	"UI/Layouts/RelativeNavigationLayout",
+	"UI/Layouts/DapLayout"
 )).
 
 GLOBAL UIlayouts TO LEXICON(
@@ -99,7 +107,9 @@ GLOBAL UIlayouts TO LEXICON(
 	//"BootLayout", UI_Manager_GetBootLayout(),
 	//"AscentLayout", UI_MAnager_GetAscentLayout(),
 	"BurnLayout", UI_Manager_GetBurnLayout(),
-	"RendezvousLayout", UI_Manager_GetRendezvousLayout()
+	"RendezvousLayout", UI_Manager_GetRendezvousLayout(),
+	"RelNavLayout", UI_Manager_GetRelNavLayout(),
+	"DapLayout", UI_Manager_GetDapLayout()
 ).
 
 FUNCTION ModeController {
@@ -130,18 +140,9 @@ UNTIL (CurrentMode = "400") {
 		ModeController("Shutdown").
 	}
 	ELSE IF (CurrentMode = "98") {
-		DAP:Init(DAP).
-		DAP:Engage(DAP).
-		UI:Start(UI).
-		AcquireControls().
-		UI:AddLayout(UI, UIlayouts:OrbitLayout, "10").
-		UI:AddLayout(UI, UIlayouts:RendezvousLayout, "34").
-		UI:AddLayout(UI, UIlayouts:BurnLayout, "12").
-		UNTIL (CurrentMode <> "98") {
-			IF(TaskQueue:LENGTH > 0) {
-				ExecTask().
-			}
-		}
+		ModeController("202").
+		local dockPort to VESSEL("Soyuz Docking Target"):PARTSTITLED("ISS Russian Docking Port")[0].
+		DockingManager(dockPort).
 	}
 	ELSE IF (CurrentMode = "100") {
 		//UI:AddLayout(UI, UIlayouts:BootLayout, "1").
@@ -212,6 +213,15 @@ UNTIL (CurrentMode = "400") {
 		UI:AddLayout(UI, UIlayouts:OrbitLayout, "10").
 		UI:AddLayout(UI, UIlayouts:RendezvousLayout, "34").
 		UI:AddLayout(UI, UIlayouts:BurnLayout, "12").
+		UI:AddLayout(UI, UIlayouts:RelNavLayout, "32").
+		UI:AddLayout(UI, UIlayouts:DapLayout, "20").
+
+		LOCAL ISS IS Vessel("Soyuz Docking Target").
+		SET ISS:LOADDISTANCE:ORBIT:UNPACK TO 2500.
+		set ISS:LOADDISTANCE:ORBIT:LOAD TO 2800.
+
+		set config:ipu to 2000.
+
 		UNTIL(CurrentMode <> "202") {
 			IF(TaskQueue:LENGTH > 0) {
 				ExecTask().
@@ -219,104 +229,7 @@ UNTIL (CurrentMode = "400") {
 			WAIT 0.1.
 		}
 	}
-	ELSE IF (CurrentMode = "CoellipticPhase") {
-		SET TARGET TO "Soyuz Docking Target".
-
-		LOCAL CurrentOrbit TO UpdateOrbitParams().
-
-		LOCAL TargetOrbit TO UpdateOrbitParams(TARGET:ORBIT).
-
-		LOCAL RBarDistance IS 5.
-		LOCAL YBarDistance IS 30.
-
-		LOCAL burn is RendezvousTransfer(CurrentOrbit, TargetOrbit, YBarDistance, RBarDistance, SHIP:ORBIT:TRUEANOMALY, TARGET:ORBIT:TRUEANOMALY).
-		IF(burn["node"] = "none") {
-			LOCAL warpToTime IS time:seconds + burn["warpTime"].
-			SET kuniverse:timewarp:mode TO "RAILS".
-			KUNIVERSE:TIMEWARP:WARPTO(warpToTime).
-			WAIT UNTIL (TIME:SECONDS > warpToTime + 2).
-			SET burn TO RendezvousTransfer(CurrentOrbit, TargetOrbit, YBarDistance, RBarDistance, SHIP:ORBIT:TRUEANOMALY, TARGET:ORBIT:TRUEANOMALY).
-		}
-
-		SET burn["depTime"] TO burn["depTime"] + TIME:SECONDS.
-		LOCAL depR TO RatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)).
-		LOCAL depV TO VatAngle(CurrentOrbit, AngleAtT(CurrentOrbit, SHIP:ORBIT:TRUEANOMALY, burn["depTime"] - TIME:SECONDS)) + burn["dV"].
-		LOCAL transferOrbit is BuildOrbitFromVR(depV, depR).
-
-		LOCAL trueBurn TO OrbitTransfer(CurrentOrbit, transferOrbit).
-
-		clearscreen.
-		print "perf test".
-		wait 5.
-		ExecBurnNew(LEXICON("dV", trueBurn:dV, "Tig", trueBurn:depTime)).
-		WAIT 2.
-		SET arrivalTime TO burn["arrivalTime"].
-		ModeController("Circularization").
-	}
-	ELSE IF (CurrentMode = "Circularization") {
-		SET TARGET TO "Soyuz Docking Target".
-		LOCAL CurrentOrbit TO UpdateOrbitParams().
-
-		LOCAL TargetOrbit TO UpdateOrbitParams(TARGET:ORBIT).
-
-		LOCAL CircularizationOrbit IS CurrentOrbit:COPY.
-		SET CircularizationOrbit["Ap"] TO TargetOrbit["Ap"] - 5000.
-		SET CircularizationOrbit["Pe"] TO CircularizationOrbit["Ap"] - 100.
-		SET CircularizationOrbit["Inc"] TO TargetOrbit["Inc"].
-		SET CircularizationOrbit["LAN"] TO TargetOrbit["LAN"].
-		SET CircularizationOrbit["AoP"] TO TargetOrbit["AoP"].
-		SET CircularizationOrbit TO BuildOrbit(CircularizationOrbit).
-
-		LOCAL CircularizationBurn IS OrbitTransfer(CurrentOrbit, CircularizationOrbit).
-		ExecBurnNew(CircularizationBurn, CurrentOrbit, CircularizationOrbit).
-		WAIT 2.
-		ModeController("TerminalPhaseInitiation").
-	}
-	ELSE IF (CurrentMode = "TerminalPhaseInitiation") {
-		SET TARGET TO "Soyuz Docking Target".
-		LOCAL ISS IS Vessel("Soyuz Docking Target").
-
-		SET ISS:LOADDISTANCE:ORBIT:UNPACK TO 1200.
-
-		LOCAL state TO CWequationFutureFromCurrent(Ship, ISS, 0, 0).
-
-		LOCAL timeToRbar TO ABS(state:LVLHrelativePosition:Y)/ABS(state:LVLHrelativeVelocity:Y) + TIME:SECONDS.
-
-		LOCAL RendezvousManagerOps TO LEXICON().
-		SET RendezvousManagerOps["chaserShip"] TO Ship.
-		SET RendezvousManagerOps["targetShip"] TO ISS.
-
-		LOCAL legs is Queue().
-		legs:PUSH(LEXICON("targetPosition", V(-1000, 0, 0), "arrivalTime", timeToRbar, "cont", false)).
-
-		SET RendezvousManagerOps["legs"] TO legs.
-		RendezvousManager(RendezvousManagerOps).
-
-		ModeController("ProximityOps").
-
-	}
-	ELSE IF (CurrentMode = "ProximityOps") {
-		SET TARGET TO "Soyuz Docking Target".
-		LOCAL ISS IS Vessel("Soyuz Docking Target").
-
-		LOCAL RendezvousManagerOps TO LEXICON().
-		SET RendezvousManagerOps["chaserShip"] TO Ship.
-		SET RendezvousManagerOps["targetShip"] TO ISS.
-
-		LOCAL legs is Queue().
-		legs:PUSH(LEXICON("targetPosition", V(-500, 0, 0), "legVelocity", 2, "cont", false)).
-		legs:PUSH(LEXICON("targetPosition", V(-100, 0, 0), "legVelocity", 1, "cont", true, "killRelVel", true)).
-
-		SET RendezvousManagerOps["legs"] TO legs.
-
-		RendezvousManager(RendezvousManagerOps).
-
-		ModeController("Docking").
-	}
-	ELSE IF (CurrentMode = "Docking") {
-		ModeController("Shutdown").
-	}
-	ELSE IF ("302") {
+	ELSE IF (CurrentMode = "302") {
 		IF(SHIP:PARTSTITLED("Soyuz Emergency Rescue System Abort Motor"):LENGTH > 0) {
 			local les to SHIP:PARTSTITLED("Soyuz Emergency Rescue System Abort Motor")[0].
 			local les_jet to SHIP:PARTSTITLED("Soyuz Emergency Rescue System Jettison Motor")[0].

@@ -223,24 +223,59 @@ declare function MatrixFindMinor {
 	return b.
 }
 
+function Matrix33MultiplyFast {
+	parameter m1.
+	parameter m2.
+
+	local m to LIST().
+	m:ADD(
+		LIST(
+			m1[0][0]*m2[0][0] + m1[0][1]*m2[1][0] + m1[0][2]*m2[2][0],
+			m1[0][0]*m2[0][1] + m1[0][1]*m2[1][1] + m1[0][2]*m2[2][1],
+			m1[0][0]*m2[0][2] + m1[0][1] * m2[1][2] + m1[0][2] * m2[2][2]
+		)
+	).
+	m:ADD(
+		LIST(
+			m2[0][0]*m1[1][0] + m2[1][0]*m1[1][1] + m1[1][2]*m2[2][0],
+			m2[0][1]*m1[1][0] + m1[1][2]*m2[2][1] + m1[1][1]*m2[1][1],
+			m2[0][2]*m1[1][0] + m1[1][2]*m2[2][2] + m2[1][2]*m1[1][1]
+		)
+	).
+	m:ADD(
+		LIST(
+			m2[0][0]*m1[2][0] + m2[1][0]*m1[2][1] + m2[2][0]*m1[2][2],
+			m2[0][1]*m1[2][0] + m2[1][1]*m1[2][1] + m2[2][1]*m1[2][2],
+			m2[0][2]*m1[2][0] + m2[1][2]*m1[2][1] + m2[2][2]*m1[2][2]
+		)
+	).
+	return m.
+}
+
 declare function MatrixMultiply {
 	declare parameter m1.
 	declare parameter m2.
+
+	if(m1:length = 3 and m2[0]:length = 3)
+		return Matrix33MultiplyFast(m1, m2).
 
 	local m to MatrixBuildZero(m1:length, m2[0]:length).
 
 	local i to 0.
 	local j to 0.
 	local k to 0.
+	local summ to 0.
 
 	until (i = m1:length) {
 		set j to 0.
 		until (j = m2[0]:length) {
 			set k to 0.
+			set summ to 0.
 			until (k = m1[0]:length) {
-				set m[i][j] to m[i][j] + m1[i][k]*m2[k][j].
+				set summ to summ + m1[i][k]*m2[k][j].
 				set k to k + 1.
 			}
+			set m[i][j] to summ.
 			set j to j + 1.
 		}
 		set i to i + 1.
@@ -455,12 +490,13 @@ declare function BuildTransformMatrix {
 	return m.
 }
 
-declare function VCMT {
-	declare parameter m.
-	declare parameter v.
+function VCMT {
+	parameter m.
+	parameter vec.
 
-	local vm to MatrixFromVector(v).
-
-	local mult to MatrixMultiply(m, vm).
-	return v(mult[0][0], mult[1][0], mult[2][0]).
+	return v(
+		vec:x*m[0][0] + vec:y * m[0][1] + vec:z * m[0][2],
+		vec:x*m[1][0] + vec:y * m[1][1] + vec:z * m[1][2],
+		vec:x*m[2][0] + vec:y * m[2][1] + vec:z * m[2][2]
+	).
 }

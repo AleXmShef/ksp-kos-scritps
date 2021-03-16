@@ -138,16 +138,38 @@ FUNCTION ExecBurnNew {
 	WAIT 1.
 }
 
+GLOBAL RendezvousManagerOpsClass TO LEXICON(
+	"Mode", "Auto",
+	"TargetShip", 0,
+	"Warp", false,
+	"Legs", QUEUE()
+).
+
+GLOBAL RendezvousManagerLegClass TO LEXICON(
+	"TargetPosition", V(0, 0, 0),
+	"LegVelocity", 2,
+	"Continuous", false
+).
+
+GLOBAL RendezvousManagerTelemetry TO LEXICON(
+	"CW_Result", 0,
+	"Status", "Inactive",
+	"Abort", false
+).
+
 FUNCTION RendezvousManager {
 	PARAMETER ops.
+
+	set RendezvousManagerTelemetry:Status to "Correcting".
 
 	FUNCTION correct {
 		PARAMETER chaserShip, targetShip, targetPosition, arrivalTime.
 		PARAMETER cont TO false.
+		parameter warp to false.
 		LOCAL warpEnabled TO false.
 		LOCAL corrected TO false.
-		UNTIL (corrected = true) {
-			if(cont = true and warpEnabled = false) {
+		UNTIL (corrected = true or ship:control:pilottranslation <> v(0, 0, 0) or RendezvousManagerTelemetry:Abort = true) {
+			if(cont = true and warpEnabled = false and warp = true) {
 				SET kuniverse:timewarp:mode TO "PHYSICS".
 				SET kuniverse:timewarp:warp TO 3.
 				SET warpEnabled TO true.
@@ -159,32 +181,7 @@ FUNCTION RendezvousManager {
 			LOCAL shipBasis TO getTransform(shipBasis).
 			LOCAL dV TO VCMT(shipBasis:Transform, requiredChange:targetChaserVelocity - requiredChange:chaserVelocity).
 
-			clearscreen.
-			print "Correcting" at (0, 0).
-			print "Current LVLH velocity:" at (0, 1).
-			print "Vel x: " + requiredChange:LVLHrelativeVelocity:X at (0,2).
-			print "Vel y: " + requiredChange:LVLHrelativeVelocity:Y at (0,3).
-			print "Vel z: " + requiredChange:LVLHrelativeVelocity:Z at (0,4).
-
-			print "Target LVLH velocity:" at (0, 6).
-			print "Vel x: " + requiredChange:targetLVLHrelativeVelocity:X at (0,7).
-			print "Vel y: " + requiredChange:targetLVLHrelativeVelocity:Y at (0,8).
-			print "Vel z: " + requiredChange:targetLVLHrelativeVelocity:Z at (0,9).
-
-			print "Current LVLH position:" at (0, 11).
-			print "Pos x: " + requiredChange:LVLHrelativePosition:X at (0,12).
-			print "Pos y: " + requiredChange:LVLHrelativePosition:Y at (0,13).
-			print "Pos z: " + requiredChange:LVLHrelativePosition:Z at (0,14).
-
-			print "Target LVLH position:" at (0, 16).
-			print "Pos x: " + targetPosition:X at (0,17).
-			print "Pos y: " + targetPosition:Y at (0,18).
-			print "Pos z: " + targetPosition:Z at (0,19).
-
-			print "dV mag: " + dV:MAG at (0, 21).
-			print "time TO WP: " + (arrivalTime - TIME:SECONDS) at (0, 22).
-
-			if(TIME:SECONDS + requiredChange:LVLHrelativeVelocity:MAG/0.1 > arrivalTime) {
+			if(TIME:SECONDS > arrivalTime - 10) {
 				SET SHIP:CONTROL:NEUTRALIZE TO true.
 				SET corrected TO true.
 				SET kuniverse:timewarp:mode TO "PHYSICS".
@@ -198,33 +195,13 @@ FUNCTION RendezvousManager {
 			else {
 				SET SHIP:CONTROL:TRANSLATION TO dV*5.
 			}
-			WAIT 0.5.
-		}
-	}
-
-	FUNCTION killRelVel {
-		PARAMETER chaserShip, targetShip.
-
-		LOCAL corrected TO false.
-		UNTIL (corrected = true) {
-
-			LOCAL shipBasis TO LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
-			LOCAL shipBasis TO getTransform(shipBasis).
-
-			LOCAL dV TO VCMT(shipBasis:Transform, targetShip:VELOCITY:ORBIT - chaserShip:VELOCITY:ORBIT).
-			if(dV:MAG < 0.05) {
-				SET SHIP:CONTROL:NEUTRALIZE TO true.
-				SET corrected TO true.
-			}
-			else {
-				SET SHIP:CONTROL:TRANSLATION TO dV*5.
-			}
 			WAIT 0.1.
 		}
 	}
 
-	LOCAL chaserShip TO ops:chaserShip.
+	LOCAL chaserShip TO SHIP.
 	LOCAL targetShip TO ops:targetShip.
+	LOCAL warp to ops:Warp.
 
 	LOCAL legs TO ops:legs.
 
@@ -233,8 +210,8 @@ FUNCTION RendezvousManager {
 
 		LOCAL currentState TO CWequationFutureFromCurrent(chaserShip, targetShip, 0, 0).
 
-		LOCAL targetPosition TO leg:targetPosition.
-		LOCAL cont TO leg:cont.
+		LOCAL targetPosition TO leg:TargetPosition.
+		LOCAL cont TO leg:Continuous.
 		LOCAL arrivalTime TO 0.
 		LOCAL legTime TO 0.
 		LOCAL legVelocity TO 0.
@@ -250,19 +227,114 @@ FUNCTION RendezvousManager {
 			SET arrivalTime TO legTime + TIME:SECONDS.
 		}
 
-		correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
+		correct(chaserShip, targetShip, targetPosition, arrivalTime, cont, warp).
 
-		if(cont = false) {
+		if(cont = false and warp = true) {
 			kuniverse:timewarp:warpto(arrivalTime - legTime/2).
-			WAIT UNTIL (time:seconds - 2 > arrivalTime - legTime/2).
+			WAIT UNTIL (time:seconds - 10 > arrivalTime - legTime/2).
 
-			correct(chaserShip, targetShip, targetPosition, arrivalTime, cont).
+			correct(chaserShip, targetShip, targetPosition, arrivalTime, cont, warp).
 
-			kuniverse:timewarp:warpto(arrivalTime - legVelocity/0.1).
-			WAIT UNTIL (time:seconds - 2 > arrivalTime - legVelocity/0.1).
-		}
-		if(leg:HASKEY("killRelVel") and leg:killRelVel = true) {
-			killRelVel(chaserShip, targetShip).
+			kuniverse:timewarp:warpto(arrivalTime - 10).
+			WAIT UNTIL (time:seconds > arrivalTime - 10).
 		}
 	}
+
+	set RendezvousManagerTelemetry:Status to "Inactive".
+	set RendezvousManagerTelemetry:Abort to "False".
+}
+
+FUNCTION KillRelVel {
+	PARAMETER chaserShip, targetShip.
+
+	LOCAL corrected TO false.
+	UNTIL (corrected = true) {
+
+		LOCAL shipBasis TO LEXICON("x", chaserShip:FACING:STARVECTOR, "y", chaserShip:FACING:UPVECTOR, "z", chaserShip:FACING:FOREVECTOR).
+		LOCAL shipBasis TO getTransform(shipBasis).
+
+		LOCAL dV TO VCMT(shipBasis:Transform, targetShip:VELOCITY:ORBIT - chaserShip:VELOCITY:ORBIT).
+		if(dV:MAG < 0.05 or ship:control:pilottranslation <> v(0, 0, 0)) {
+			SET SHIP:CONTROL:NEUTRALIZE TO true.
+			SET corrected TO true.
+		}
+		else {
+			SET SHIP:CONTROL:TRANSLATION TO dV*5.
+		}
+		WAIT 0.1.
+	}
+}
+
+FUNCTION DockingManager {
+	parameter dockingPort.
+
+	DAP:SetMode(DAP, "Track", LEXICON("Target", dockingPort, "Reference", "Position")).
+
+	local aligned to false.
+
+	until (aligned = true or SHIP:CONTROL:PILOTNEUTRAL = false) {
+		clearvecdraws().
+		local portAxis to dockingPort:FACING:FOREVECTOR.
+		local desPos to portAxis*100.
+		local curPos to Components:dockingPort:POSITION - dockingPort:POSITION.
+
+		//distance correction
+		local distance_correction to -((curPos:MAG - 100)/ABS(curPos:MAG - 100))*curPos:NORMALIZED*MIN(0.5, ABS(curPos:MAG - 100)/10).
+
+		//position correction
+		local position_correction to (vcrs(vcrs(curPos, desPos), curPos):NORMALIZED) * min(0.5, (desPos - curPos):MAG/2).
+
+		local dV to (distance_correction + position_correction) - (SHIP:VELOCITY:ORBIT - dockingPort:SHIP:VELOCITY:ORBIT).
+
+		LOCAL shipBasis TO LEXICON("x", SHIP:FACING:STARVECTOR, "y", SHIP:FACING:UPVECTOR, "z", SHIP:FACING:FOREVECTOR).
+		LOCAL shipBasis TO getTransform(shipBasis).
+		LOCAL dV_ TO VCMT(shipBasis:Transform, dV).
+
+		if(dV:MAG > 0.01)
+			set ship:control:translation to dV_*5.
+
+		if((desPos - curPos):MAG < 0.5) {
+			set aligned to true.
+			set ship:control:neutralize to true.
+		}
+
+
+		// vecdraw(dockingPort:POSITION, portAxis*100, rgb(0, 1, 0), "portAxis", 1.0, true, 0.2, true, true).
+		// vecdraw(dockingPort:POSITION, curPos, rgb(0, 1, 0), "curPos", 1.0, true, 0.2, true, true).
+		wait 0.01.
+	}
+	local docked to false.
+	DAP:SetMode(DAP, "Track", LEXICON("Target", dockingPort, "Reference", "Orientation")).
+	until (docked = true or SHIP:CONTROL:PILOTNEUTRAL = false) {
+		clearvecdraws().
+		local portAxis to dockingPort:FACING:FOREVECTOR.
+		local desPos to portAxis*100.
+		local curPos to Components:dockingPort:POSITION - dockingPort:POSITION.
+
+		//distance correction
+		local distance_correction to -curPos:NORMALIZED*MIN(0.5, ABS(curPos:MAG)/5).
+
+		//position correction
+		local position_correction to (vcrs(vcrs(curPos, desPos), curPos):NORMALIZED) * min(0.2, curPos:MAG*sin(vang(curPos, desPos))/5).
+
+		local dV to (distance_correction + position_correction) - (SHIP:VELOCITY:ORBIT - dockingPort:SHIP:VELOCITY:ORBIT).
+
+		LOCAL shipBasis TO LEXICON("x", SHIP:FACING:STARVECTOR, "y", SHIP:FACING:UPVECTOR, "z", SHIP:FACING:FOREVECTOR).
+		LOCAL shipBasis TO getTransform(shipBasis).
+		LOCAL dV_ TO VCMT(shipBasis:Transform, dV).
+
+		if(dV:MAG > 0.01)
+			set ship:control:translation to dV_*5.
+
+		if(dockingPort:haspartner) {
+			set docked to true.
+			set ship:control:neutralize to true.
+		}
+
+
+		// vecdraw(dockingPort:POSITION, portAxis*100, rgb(0, 1, 0), "portAxis", 1.0, true, 0.2, true, true).
+		// vecdraw(dockingPort:POSITION, curPos, rgb(0, 1, 0), "curPos", 1.0, true, 0.2, true, true).
+		wait 0.01.
+	}
+	DAP:Disengage(DAP).
 }

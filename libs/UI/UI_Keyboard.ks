@@ -27,8 +27,8 @@ declare function UIkeyboardCreate {
 	).
 
 	SET UIkeyboard["GUIclass"] TO GUI(270/5*4, 270).
-	SET UIkeyboard["GUIclass"]:X TO 200.
-	SET UIkeyboard["GUIclass"]:Y TO 50.
+	SET UIkeyboard["GUIclass"]:X TO 518.
+	SET UIkeyboard["GUIclass"]:Y TO 48.
 
 	SET UIkeyboard["HorizontalBox"] TO UIkeyboard["GUIclass"]:ADDHLAYOUT().
 

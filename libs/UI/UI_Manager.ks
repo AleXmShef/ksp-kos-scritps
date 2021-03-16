@@ -216,8 +216,8 @@ declare function UI_Manager_Refresh {
 
 declare function UI_Manager_Init {
 	clearscreen.
-	print "/   /   .--------------------------------------------------.".	//0
-	print ".-------*                                                  |".	//1
+	print "/   /   .--------------------------------------------.     ".	//0
+	print ".-------*                                            *-----.".	//1
 	print "|----------------------------------------------------------|".	//2
 	print "| MET:         d   h   m   s || UTC:                :  :   |".	//3
 	print "|----------------------------------------------------------|".	//4
@@ -244,6 +244,8 @@ declare function UI_Manager_Print_CommandLine {
 declare function UI_Manager_Update {
 	declare parameter self.
 
+	local beginTime to TIME:SECONDS.
+
 	if(DEFINED(ShipName))
 		pc(ShipName, 1, false, 0).
 	else
@@ -261,6 +263,8 @@ declare function UI_Manager_Update {
 
 	if(self:Data:ActiveLayout >= 0)
 		self:Layouts[self:Data:ActiveLayout]:Update(self:Layouts[self:Data:ActiveLayout]).
+
+	pr(TIME:SECONDS - beginTime, 59, 0, true, 0).
 
 	// for key in self:Layouts[self:Data:ActiveLayout]:Items:KEYS {
 	// 	local item is self:Layouts[self:Data:ActiveLayout]:Items[key].

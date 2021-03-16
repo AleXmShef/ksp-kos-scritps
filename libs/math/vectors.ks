@@ -102,7 +102,7 @@ declare function getLVLHfromR {
 	LOCAL plusX IS position:VEC.
 	SET plusX:MAG TO 1.
 
-	LOCAL plusY TO -VCRS(ANNorm(orbit["LAN"], orbit["Inc"]):UPVECTOR:NORMALIZED, plusX).
+	LOCAL plusY TO -VCRS(ANNorm(orbit["LAN"], orbit["Inc"]):UPVECTOR, plusX).
 	SET plusY:MAG TO 1.
 
 	LOCAL plusZ IS VCRS(plusX, plusY).

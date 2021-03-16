@@ -114,7 +114,7 @@ function DAP_SetTarget {
 		local vec_up to 0.
 		if(self:Mode:Mode = "Inertial") {
 			set vec_fwd to toIRF(tgt).
-			set vec_up to toIRF(v(1, 0, 0)).
+			set vec_up to v(1, 0, 0).
 		}
 		else if(self:Mode:Mode = "LVLH") {
 			local lvlh to getLVLHfromR_DAP(UpdateOrbitParams(), -SHIP:BODY:POSITION).
@@ -122,7 +122,7 @@ function DAP_SetTarget {
 			set vec_up to lvlh:basis:x.
 		}
 		local tgtDir to LOOKDIRUP(vec_fwd, vec_up).
-		set self:Mode:Target to tgtDir.
+		set self["Mode"]["Target"] to tgtDir.
 	}
 	set self["Internal"]["AlreadyInUpdate"] to false.
 }
@@ -205,6 +205,16 @@ function DAP_UpdateAttitude {
 			set raw_fore to VCMT(lvlh:Inverse, self:Mode:Target:forevector).
 			set raw_up to -SHIP:BODY:POSITION:NORMALIZED.
 		}
+		else if(self:Mode:Mode = "Track") {
+			if(self:Mode:Reference = "Position") {
+				set raw_fore to self:Mode:Target:POSITION.
+				set raw_up to -SHIP:BODY:POSITION.
+			}
+			else if(self:Mode:Reference = "Orientation") {
+				set raw_fore to -self:Mode:Target:FACING:FOREVECTOR.
+				set raw_up to self:Mode:Target:FACING:UPVECTOR.
+			}
+		}
 
 		local pitch to 90 - VANG(shipBasis:y, raw_fore - shipBasis:x * cos(vang(raw_fore, shipBasis:x))).
 		local yaw to 90 - VANG(shipBasis:x, raw_fore - shipBasis:y * cos(vang(raw_fore, shipBasis:y))).
@@ -236,7 +246,7 @@ function DAP_Update {
 	parameter self.
 	if (self:Engaged AND self:Internal:AlreadyInUpdate = false) {
 		set self:Internal:AlreadyInUpdate to true.
-		if(SHIP:CONTROL:PILOTNEUTRAL) {
+		if(SHIP:CONTROL:PILOTROTATION = v(0, 0, 0)) {
 			if(self:ManualOverride) {
 				set self:ManualOverride to false.
 				if(self:Mode:Mode = "Track") {
